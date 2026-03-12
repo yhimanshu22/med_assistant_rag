@@ -1,11 +1,7 @@
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
-
-# Configuration
-# Fallback to a smaller model for CPU to ensure it runs
-GPU_MODEL_ID = "meta-llama/Meta-Llama-3-8B-Chat"
-CPU_MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+from med_assistant.core.config import settings
 
 def load_model_and_pipeline():
     """
@@ -16,8 +12,8 @@ def load_model_and_pipeline():
     print(f"Device detected: {device}")
 
     if device == "cuda":
-        model_id = GPU_MODEL_ID
-        print(f"Loading {model_id} with 4-bit quantization...")
+        model_id = settings.GPU_MODEL_ID
+        print(f"Loading {model_id} with 4-bit quantization (checking cache: {settings.MODEL_CACHE_DIR})...")
         try:
             from torch import bfloat16
             bnb_config = transformers.BitsAndBytesConfig(
@@ -27,7 +23,7 @@ def load_model_and_pipeline():
                 bnb_4bit_compute_dtype=bfloat16
             )
             model_config = transformers.AutoConfig.from_pretrained(
-                model_id, trust_remote_code=True, max_new_tokens=1024
+                model_id, trust_remote_code=True, max_new_tokens=1024, cache_dir=settings.MODEL_CACHE_DIR
             )
             model = AutoModelForCausalLM.from_pretrained(
                 model_id,
@@ -35,36 +31,32 @@ def load_model_and_pipeline():
                 config=model_config,
                 quantization_config=bnb_config,
                 device_map="auto",
+                cache_dir=settings.MODEL_CACHE_DIR
             )
         except Exception as e:
             print(f"Failed to load quantized model: {e}")
             raise e
     else:
-        # ** CPU Fallback **
-        # Llama-3-8B is too big for most CPUs (RAM usage), so we use TinyLlama for testing/local usage
-        model_id = CPU_MODEL_ID
-        print(f"Loading {model_id} for CPU usage (Quantization disabled)...")
-        # No bitsandbytes config for CPU
+        model_id = settings.CPU_MODEL_ID
+        print(f"Loading {model_id} for CPU usage (checking cache: {settings.MODEL_CACHE_DIR})...")
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             trust_remote_code=True,
-            device_map="cpu", # Explicitly set to CPU
-            torch_dtype=torch.float32 # Use standard float32 for CPU compatibility
+            device_map="cpu",
+            torch_dtype=torch.bfloat16,
+            cache_dir=settings.MODEL_CACHE_DIR
         )
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=settings.MODEL_CACHE_DIR)
     
     query_pipeline = transformers.pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-        max_length=2048,
-        device_map=device, # "auto" or "cpu"
-        repetition_penalty=1.1,
-        do_sample=True,
-        temperature=0.7,
-        top_p=0.95,
+        torch_dtype=torch.float16 if device == "cuda" else torch.bfloat16,
+        max_length=1024,
+        device_map=device,
+        do_sample=False
     )
     
     return query_pipeline

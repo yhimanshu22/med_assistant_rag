@@ -1,18 +1,55 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Environment
+# Environments
 .env
 .venv
-venv/
 env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Data
+# Project Directories & Caches
 data/
 chroma_db/
+models_cache/
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
 
 # Logs
 *.log
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
+*.swo

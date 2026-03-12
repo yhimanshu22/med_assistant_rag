@@ -1,14 +1,12 @@
-from langchain.llms import HuggingFacePipeline
+from langchain_huggingface import HuggingFacePipeline, HuggingFaceEmbeddings
 from langchain.chains import RetrievalQA
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
 import torch
 
-from app.model import load_model_and_pipeline
-
-# Configuration
-DB_DIR = "chroma_db"
-EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
+from med_assistant.core.config import settings
+from med_assistant.services.llm_service import load_model_and_pipeline
+from langchain.prompts import PromptTemplate
 
 class RAGService:
     def __init__(self):
@@ -28,26 +26,30 @@ class RAGService:
         # 2. Load Embeddings
         # Check device for embedding model
         model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, model_kwargs=model_kwargs)
+        encode_kwargs = {'normalize_embeddings': False}
+        embeddings = HuggingFaceEmbeddings(
+            model_name=settings.EMBEDDING_MODEL, 
+            model_kwargs=model_kwargs,
+            encode_kwargs=encode_kwargs,
+            cache_folder=settings.MODEL_CACHE_DIR
+        )
 
         # 3. Load VectorDB
-        print(f"Loading ChromaDB from {DB_DIR}...")
-        self.vectordb = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
+        print(f"Loading ChromaDB from {settings.DB_DIR}...")
+        self.vectordb = Chroma(persist_directory=settings.DB_DIR, embedding_function=embeddings)
 
         # 4. Create QA Chain
-        retriever = self.vectordb.as_retriever()
-        from langchain.prompts import PromptTemplate
+        retriever = self.vectordb.as_retriever(search_kwargs={"k": 3})
 
         template = """
-Use the following pieces of context to answer the question at the end. 
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Keep the answer concise and helpful for a medical doctor.
+You are a concise medical assistant. Use the context to answer the question briefly.
+If unknown, say you do not know. 
 
 Context: {context}
 
 Question: {question}
 
-Helpful Answer:"""
+Answer:"""
 
         QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 

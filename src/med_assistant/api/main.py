@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 from time import time
 import uvicorn
+import asyncio
 
-from app.schema import QueryRequest, QueryResponse, DocumentSource
-from app.rag import RAGService
+from med_assistant.models.schemas import QueryRequest, QueryResponse, DocumentSource
+from med_assistant.services.rag_service import RAGService
+from med_assistant.services.ingestion_service import ingest_documents_generator
 
-# Global RAG service instance
 rag_service = RAGService()
 
 @asynccontextmanager
@@ -31,23 +33,9 @@ async def query_endpoint(request: QueryRequest):
 
     start_time = time()
     try:
-        # The chain returns a dict with keys like 'query', 'result', 'source_documents' (if enabled)
-        # Note: RetrievalQA run() usually returns just the result string unless return_source_documents is True in the chain
-        # Our RAGService uses from_chain_type which defaults return_source_documents to False.
-        # Let's adjust rag.py if we want source docs, or just return the answer for now.
-        # Actually, let's fix rag.py to return source documents because our schema expects them.
-        
-        # However, to avoid circular editing complexity right now, let's just assume we get the result.
-        # Wait, I should make sure rag.py sets return_source_documents=True if I want them.
-        # I'll update rag.py in a separate step if I missed it, but for now let's handle the response generic.
-        
         response = rag_service.answer_question(request.question)
         
-        # response is typically a dict if using `qa_chain(inputs)` or string if `run(inputs)`
-        # RetrievalQA `run` returns just string. `__call__` (which implies `call`) returns dict.
-        # rag.py used `self.qa_chain(question)`.
-        
-        answer_text = response['result']
+        answer_text = response.get('result', str(response))
         source_docs = []
         
         if 'source_documents' in response:
@@ -68,5 +56,27 @@ async def query_endpoint(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/ingest")
+async def ingest_endpoint():
+    """
+    Endpoint to trigger document ingestion and stream progress.
+    """
+    async def generate():
+        loop = asyncio.get_running_loop()
+        # Since ingestion_service is synchronous and does heavy lifting, we yield its results back to avoid blocking totally
+        for msg in ingest_documents_generator():
+            yield msg + "\n"
+        
+        # After ingestion logic has yielded all its parts, refresh the RAG model pipeline
+        yield "\nReloading Vector Database indices...\n"
+        try:
+            # We run the initialization on the threadpool safely
+            await loop.run_in_executor(None, rag_service.initialize)
+            yield "Database Refresh Complete.\n"
+        except Exception as e:
+            yield f"Error refreshing Database: {e}\n"
+
+    return StreamingResponse(generate(), media_type="text/plain")
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("med_assistant.api.main:app", host="0.0.0.0", port=8000, reload=False)

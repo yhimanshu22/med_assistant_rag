@@ -1,15 +1,15 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 
 class QueryRequest(BaseModel):
     question: str
 
 class DocumentSource(BaseModel):
     page_content: str
-    metadata: dict
+    metadata: Dict[str, Any]
 
 class QueryResponse(BaseModel):
     question: str
     answer: str
-    source_documents: List[DocumentSource] = []
-    total_time: Optional[str] = None
+    source_documents: Optional[List[DocumentSource]] = []
+    total_time: str

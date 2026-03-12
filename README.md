@@ -26,9 +26,9 @@ This project is a powerful Retrieval-Augmented Generation (RAG) system wrapped i
 ## 🚀 Getting Started
 
 ### 1. Installation & Setup
-Clone the repository and install the required dependencies:
+Clone the repository and install the required dependencies using `uv`:
 ```bash
-pip install -r requirements.txt
+uv sync   # This creates the virtual environment and installs dependencies from pyproject.toml
 ```
 
 Authenticate your Hugging Face account (to download the model checkpoint):
@@ -41,7 +41,7 @@ huggingface-cli login
 2. Place your reference PDF documents (e.g., medical studies, regulations, or drug manuals) into the `data/` directory.
 3. Run the data ingestion script to process the PDFs and initialize the vector database.
 ```bash
-python ingest.py
+uv run python -m med_assistant.services.ingestion_service
 ```
 > *This will generate a `chroma_db/` directory containing the document embeddings.*
 
@@ -51,13 +51,12 @@ You'll need two terminal instances to run the full application (Backend + Fronte
 
 **Start the FastAPI Backend:**
 ```bash
-python main.py
+uv run uvicorn med_assistant.api.main:app --host 0.0.0.0 --port 8000
 ```
-> *Alternatively, use: `uvicorn main:app --host 0.0.0.0 --port 8000`. The API runs at `http://localhost:8000`.*
 
 **Start the Streamlit UI (In a new terminal):**
 ```bash
-streamlit run ui.py
+uv run streamlit run src/med_assistant/ui/app.py
 ```
 > *The interactive chat interface will automatically open in your browser at `http://localhost:8501`.*
 
