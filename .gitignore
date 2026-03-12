@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environment
+.env
+.venv
+venv/
+env/
+
+# Data
+data/
+chroma_db/
+
+# Logs
+*.log
