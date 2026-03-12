@@ -54,9 +54,11 @@ def load_model_and_pipeline():
         model=model,
         tokenizer=tokenizer,
         torch_dtype=torch.float16 if device == "cuda" else torch.bfloat16,
-        max_length=1024,
+        max_new_tokens=256,
         device_map=device,
-        do_sample=False
+        do_sample=False,
+        repetition_penalty=1.1,
+        return_full_text=False
     )
     
     return query_pipeline

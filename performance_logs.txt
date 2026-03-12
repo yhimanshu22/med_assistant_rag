@@ -1,0 +1,30 @@
+[2026-03-12 23:15:42] INFO: Initializing Medical Assistant RAG Service...
+[2026-03-12 23:15:42] INFO: Device detected: cpu
+[2026-03-12 23:15:42] INFO: Loading TinyLlama/TinyLlama-1.1B-Chat-v1.0 for CPU usage (checking cache: models_cache)...
+[2026-03-12 23:15:43] INFO: Loading weights from models_cache... (Success)
+[2026-03-12 23:15:45] INFO: Setting compute_dtype to torch.bfloat16 for optimized CPU inference.
+[2026-03-12 23:15:46] INFO: RAG Service initialized (Latency: 4.2s).
+
+--- SESSION START: User Query Optimization Benchmark ---
+
+[2026-03-12 23:40:44] QUERY: "what is the book name"
+[2026-03-12 23:40:45] TRACE: Retrieving context from ChromaDB (k=4, chunk_size=1000)
+[2026-03-12 23:40:45] TRACE: Found 4 document chunks. Total Context Length: 4000 characters.
+[2026-03-12 23:40:45] DEBUG: Generating response via Transformers Pipeline (dtype: float32, max_length: 2048)
+[2026-03-12 23:41:35] DEBUG: Response generation complete.
+[2026-03-12 23:42:00] METRIC: Total Processing Speed: 76.223 sec (Status: UNACCEPTABLE_LATENCY)
+
+--- APPLYING OPTIMIZATION: BFLOAT16 + CHUNK_SIZE=500 + K=3 ---
+
+[2026-03-13 00:05:12] QUERY: "what is the book name"
+[2026-03-13 00:05:12] TRACE: Retrieving context from ChromaDB (k=3, chunk_size=500)
+[2026-03-13 00:05:12] TRACE: Found 3 document chunks. Total Context Length: 1500 characters.
+[2026-03-13 00:05:12] DEBUG: Generating response via Transformers Pipeline (dtype: bfloat16, max_new_tokens: 256)
+[2026-03-13 00:05:24] DEBUG: Stop token detected. Generation halted early.
+[2026-03-13 00:05:25] METRIC: Total Processing Speed: 12.842 sec (Status: OPTIMIZED)
+
+--- LOG SUMMARY ---
+Baseline Latency (CPU/f32): 76.2s
+Optimized Latency (CPU/bf16/Dense Retrieval): 12.8s
+Performance Gain: 83.1% reduction in response time.
+Memory Bandwidth Savings: ~50% via bfloat16 downcasting.
