@@ -8,11 +8,11 @@ This project is a powerful Retrieval-Augmented Generation (RAG) system wrapped i
 *   **Vector Database**: Employs **ChromaDB** with sentence embeddings for highly accurate context retrieval.
 *   **Dual Architecture**: 
     *   **FastAPI Backend**: A lightweight, asynchronous RESTful API for integrations.
-    *   **Streamlit Frontend**: An interactive, user-friendly graphical interface to query data and view source documentation.
+    *   **React + Vite Frontend**: A modern, interactive, and high-performance user interface for querying data and managing documents.
 
 ## 🛠️ Tech Stack
 *   **Backend & API**: `FastAPI`, `Uvicorn`
-*   **Frontend UI**: `Streamlit`
+*   **Frontend UI**: `React`, `Vite`, `TypeScript`, `Lucide React`, `Framer Motion`
 *   **LLM & RAG**: `LangChain`, `HuggingFace Transformers`, `PyTorch` (`bitsandbytes`, `accelerate`, `xformers`)
 *   **Embeddings**: `Sentence-Transformers`
 *   **Vector Store**: `ChromaDB`
@@ -54,11 +54,13 @@ You'll need two terminal instances to run the full application (Backend + Fronte
 uv run uvicorn med_assistant.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-**Start the Streamlit UI (In a new terminal):**
+**Start the React UI (In a new terminal):**
 ```bash
-uv run streamlit run src/med_assistant/ui/app.py
+cd frontend
+npm install
+npm run dev
 ```
-> *The interactive chat interface will automatically open in your browser at `http://localhost:8501`.*
+> *The interactive chat interface will be available at `http://localhost:5173`.*
 
 ---
 

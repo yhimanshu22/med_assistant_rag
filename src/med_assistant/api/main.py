@@ -1,5 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import os
+import shutil
 from contextlib import asynccontextmanager
 from time import time
 import uvicorn
@@ -22,6 +25,15 @@ async def lifespan(app: FastAPI):
     # Clean up if needed
 
 app = FastAPI(title="Medical Assistant RAG API", lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Vite default port
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest):
@@ -77,6 +89,22 @@ async def ingest_endpoint():
             yield f"Error refreshing Database: {e}\n"
 
     return StreamingResponse(generate(), media_type="text/plain")
+
+@app.post("/upload")
+async def upload_endpoint(file: UploadFile = File(...)):
+    """
+    Endpoint to upload a medical PDF document.
+    """
+    data_dir = os.path.join(os.getcwd(), "data")
+    os.makedirs(data_dir, exist_ok=True)
+    file_path = os.path.join(data_dir, file.filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"filename": file.filename, "status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run("med_assistant.api.main:app", host="0.0.0.0", port=8000, reload=False)
