@@ -26,3 +26,13 @@ export interface QueryResponse {
   source_documents: DocumentSource[];
   total_time: string;
 }
+
+export interface IngestionLog {
+  step: 'scanning' | 'processing' | 'splitting' | 'embedding' | 'ingesting' | 'complete';
+  message: string;
+  file?: string;
+  status?: 'info' | 'warning' | 'error';
+  total_time?: string;
+}
+
+

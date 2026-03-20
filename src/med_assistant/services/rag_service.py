@@ -39,17 +39,30 @@ class RAGService:
         self.vectordb = Chroma(persist_directory=settings.DB_DIR, embedding_function=embeddings)
 
         # 4. Create QA Chain
-        retriever = self.vectordb.as_retriever(search_kwargs={"k": 3})
+        # Increased k to 6 and enabled MMR for better context variety and accuracy
+        retriever = self.vectordb.as_retriever(
+            search_type="mmr",
+            search_kwargs={"k": 6, "fetch_k": 20, "lambda_mult": 0.5}
+        )
 
         template = """
-You are a concise medical assistant. Use the context to answer the question briefly.
-If unknown, say you do not know. 
+You are a highly accurate and professional Medical Assistant. 
+Your goal is to provide evidence-based answers using ONLY the provided medical context.
 
-Context: {context}
+INSTRUCTIONS:
+1. Base your answer strictly on the provided context. 
+2. If the context does not contain enough information to answer the question, state clearly that you do not have enough specific information from the provided documents.
+3. Maintain a professional, clinical, and helpful tone.
+4. If there are conflicting details in the context, mention them.
+5. Do NOT hallucinate or use outside knowledge that isn't supported by the context.
 
-Question: {question}
+Context:
+{context}
 
-Answer:"""
+Question: 
+{question}
+
+Detailed Evidence-Based Answer:"""
 
         QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 

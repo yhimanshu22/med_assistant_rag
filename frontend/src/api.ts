@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QueryResponse } from './types';
+import type { QueryResponse, IngestionLog } from './types';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -15,7 +15,7 @@ export const queryMedicalAssistant = async (question: string): Promise<QueryResp
   return response.data;
 };
 
-export const ingestDocuments = async (file: File, onProgress: (msg: string) => void): Promise<void> => {
+export const ingestDocuments = async (file: File, onProgress: (log: IngestionLog) => void): Promise<void> => {
   // First, we need to upload the file to the 'data' directory.
   // Since the current FastAPI backend doesn't have a file upload endpoint (Streamlit was doing it manually),
   // I should add a file upload endpoint to FastAPI as well to make it work with React.
@@ -42,6 +42,16 @@ export const ingestDocuments = async (file: File, onProgress: (msg: string) => v
     const { done, value } = await reader.read();
     if (done) break;
     const chunk = decoder.decode(value, { stream: true });
-    onProgress(chunk);
+    
+    // Split by newline and parse each line
+    const lines = chunk.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      try {
+        const logData = JSON.parse(line) as IngestionLog;
+        onProgress(logData);
+      } catch (e) {
+        console.warn('Failed to parse log line:', line, e);
+      }
+    }
   }
 };

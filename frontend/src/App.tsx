@@ -11,8 +11,19 @@ import {
   Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Message } from './types';
+import type { Message, IngestionLog } from './types';
 import { queryMedicalAssistant, ingestDocuments } from './api';
+import { 
+  CheckCircle2, 
+  AlertCircle, 
+  Search, 
+  Cpu, 
+  Database, 
+  Layers, 
+  FileCheck,
+  Timer,
+  ShieldCheck
+} from 'lucide-react';
 import './App.css';
 
 const App: React.FC = () => {
@@ -20,7 +31,7 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
-  const [ingestionLogs, setIngestionLogs] = useState<string[]>([]);
+  const [ingestionLogs, setIngestionLogs] = useState<IngestionLog[]>([]);
   const [expandedSources, setExpandedSources] = useState<Record<number, boolean>>({});
   
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -75,16 +86,19 @@ const App: React.FC = () => {
     if (!file) return;
 
     setIsIngesting(true);
-    setIngestionLogs(["Starting ingestion..."]);
+    setIngestionLogs([{ step: 'scanning', message: 'Starting ingestion...' }]);
 
     try {
-      await ingestDocuments(file, (msg) => {
-        setIngestionLogs(prev => [...prev, msg]);
+      await ingestDocuments(file, (log) => {
+        setIngestionLogs(prev => [...prev, log]);
       });
-      setIngestionLogs(prev => [...prev, "Ingestion complete!"]);
     } catch (error) {
       console.error('Ingestion failed:', error);
-      setIngestionLogs(prev => [...prev, `Error: ${error instanceof Error ? error.message : 'Unknown error'}`]);
+      setIngestionLogs(prev => [...prev, { 
+        step: 'processing', 
+        message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        status: 'error' 
+      }]);
     } finally {
       setIsIngesting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -138,9 +152,47 @@ const App: React.FC = () => {
           
           {ingestionLogs.length > 0 && (
             <div className="ingestion-log">
-              {ingestionLogs.map((log, i) => (
-                <div key={i}>{log}</div>
-              ))}
+              {ingestionLogs.map((log, i) => {
+                const isLast = i === ingestionLogs.length - 1;
+                let Icon = Search;
+                if (log.step === 'processing') Icon = FileCheck;
+                if (log.step === 'splitting') Icon = Layers;
+                if (log.step === 'embedding') Icon = Cpu;
+                if (log.step === 'ingesting') Icon = Database;
+                if (log.step === 'complete') Icon = CheckCircle2;
+                
+                return (
+                  <div key={i} className={`ingestion-item ${isLast && isIngesting ? 'active' : ''}`}>
+                    <div className="ingestion-item-icon">
+                      {log.status === 'error' ? (
+                        <AlertCircle size={16} color="#ef4444" />
+                      ) : (log.status === 'warning' ? (
+                        <AlertCircle size={16} color="#f59e0b" />
+                      ) : (
+                        <Icon size={16} color={log.step === 'complete' ? '#10b981' : 'var(--primary)'} />
+                      ))}
+                    </div>
+                    <div className="ingestion-item-content">
+                      <div className="ingestion-item-message">
+                        {log.message}
+                        {log.step === 'complete' && log.total_time && (
+                          <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>
+                            ({log.total_time})
+                          </span>
+                        )}
+                      </div>
+                      {log.file && <div className="ingestion-item-file">{log.file}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {!isIngesting && ingestionLogs.some(l => l.step === 'complete') && (
+                <div className="ingestion-status">
+                  <span>Process complete</span>
+                  <CheckCircle2 size={14} color="#10b981" />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -237,9 +289,24 @@ const App: React.FC = () => {
                 )}
                 
                 {msg.total_time && (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px', alignSelf: 'flex-start' }}>
-                    Speed: {msg.total_time}
-                  </span>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px', 
+                    fontSize: '0.7rem', 
+                    color: 'var(--text-muted)', 
+                    marginTop: '6px', 
+                    alignSelf: 'flex-start',
+                    background: '#f1f5f9',
+                    padding: '2px 8px',
+                    borderRadius: '100px'
+                  }}>
+                    <Timer size={12} />
+                    <span>Response Time: {msg.total_time}</span>
+                    <span style={{ margin: '0 4px', opacity: 0.3 }}>|</span>
+                    <ShieldCheck size={12} color="#10b981" />
+                    <span style={{ color: '#059669', fontWeight: 500 }}>Accuracy Focused</span>
+                  </div>
                 )}
               </div>
             ))

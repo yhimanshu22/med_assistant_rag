@@ -58,15 +58,65 @@
 
 .ingestion-log {
   margin-top: 1rem;
-  background: #f1f5f9;
-  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 0.75rem;
-  font-size: 0.75rem;
-  font-family: monospace;
-  max-height: 150px;
+  max-height: 250px;
   overflow-y: auto;
-  color: #475569;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
+
+.ingestion-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: white;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.ingestion-item.active {
+  border-color: var(--primary);
+  background-color: #f0f9ff;
+}
+
+.ingestion-item-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ingestion-item-content {
+  flex: 1;
+}
+
+.ingestion-item-message {
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.ingestion-item-file {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.ingestion-status {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 
 /* Main Chat Area */
 .main-content {
