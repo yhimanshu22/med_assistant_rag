@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: med-assistant-config
+  namespace: med-assistant
+data:
+  DB_DIR: "/app/chroma_db"
+  DATA_DIR: "/app/data"
+  MODEL_CACHE_DIR: "/app/models_cache"
+  # Replace with the actual address if different
+  BACKEND_URL: "http://backend-service:8000"

@@ -64,6 +64,59 @@ npm run dev
 
 ---
 
+## 🐳 Docker Deployment
+
+The project includes a `docker-compose.yml` for simplified local orchestration of both the backend and frontend.
+
+### 1. Build and Start
+Ensure you have Docker and Docker Compose installed:
+```bash
+docker compose up --build
+```
+
+### 2. Access the Application
+- **Frontend**: `http://localhost:5173`
+- **Backend API**: `http://localhost:8000`
+
+### 3. Persistence
+The following directories are mapped as volumes to ensure data persists across container restarts:
+- `./chroma_db`: The vector database index.
+- `./data`: Source PDF documents for ingestion.
+- `./models_cache`: Cached Hugging Face models to avoid re-downloading.
+
+---
+
+## ☸️ Kubernetes Deployment
+
+Kubernetes manifests are provided in the `k8s/` directory for deploying to a cluster (e.g., Minikube, GKE, EKS).
+
+### 1. Build Images
+Tag and build your images (replace with your registry if needed):
+```bash
+docker build -t med-assistant-backend:latest .
+docker build -t med-assistant-frontend:latest ./frontend
+```
+
+### 2. Deploy to Cluster
+Apply all manifests in the `k8s/` directory:
+```bash
+kubectl apply -f k8s/
+```
+
+### 3. Verify Deployment
+Check the status of your pods and services:
+```bash
+kubectl get pods -n med-assistant
+kubectl get svc -n med-assistant
+```
+
+### 4. Access the Frontend (Minikube example)
+```bash
+minikube service frontend-service -n med-assistant
+```
+
+---
+
 ## 🌐 API Reference
 
 If you want to query the backend programmatically, you can use the `/query` endpoint.
