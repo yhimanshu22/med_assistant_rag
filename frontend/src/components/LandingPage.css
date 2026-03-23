@@ -24,9 +24,9 @@
 }
 
 .nav-container {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 1.5rem 2rem;
+  padding: 1.5rem 5%;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -65,12 +65,12 @@
 }
 
 .hero-container {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.1fr 0.9fr;
   align-items: center;
-  gap: 4rem;
+  gap: 5%;
 }
 
 .badge {
@@ -244,11 +244,11 @@
 }
 
 .features-grid {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2.5rem;
+  gap: 3rem;
 }
 
 .feature-card {
@@ -296,12 +296,12 @@
 }
 
 .workflow-container {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
   align-items: center;
-  gap: 6rem;
+  gap: 10%;
 }
 
 .workflow-step-visual {
@@ -368,7 +368,7 @@
 }
 
 .footer-container {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
