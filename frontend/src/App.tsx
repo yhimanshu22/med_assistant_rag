@@ -24,11 +24,11 @@ import {
   Timer,
   ShieldCheck
 } from 'lucide-react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
 import './App.css';
 
 const App: React.FC = () => {
-  const [showLanding, setShowLanding] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -119,32 +119,37 @@ const App: React.FC = () => {
     setExpandedSources({});
   };
 
+  const navigate = useNavigate();
+
   return (
     <AnimatePresence mode="wait">
-      {showLanding ? (
-        <motion.div
-          key="landing"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <LandingPage onStart={() => setShowLanding(false)} />
-        </motion.div>
-      ) : (
-        <motion.div
-          key="chat"
-          className="app-container"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Sidebar */}
-          <aside className="sidebar">
-            <div className="sidebar-header">
-              <Stethoscope size={32} color="var(--primary)" strokeWidth={2.5} />
-              <h1 onClick={() => setShowLanding(true)} style={{ cursor: 'pointer' }}>MedAssist RAG</h1>
-            </div>
+      <Routes>
+        <Route path="/" element={
+          <motion.div
+            key="landing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <LandingPage onStart={() => navigate('/chat')} />
+          </motion.div>
+        } />
+        
+        <Route path="/chat" element={
+          <motion.div
+            key="chat"
+            className="app-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* Sidebar */}
+            <aside className="sidebar">
+              <div className="sidebar-header">
+                <Stethoscope size={32} color="var(--primary)" strokeWidth={2.5} />
+                <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist RAG</h1>
+              </div>
 
             <div className="sidebar-section">
               <h2>Document Management</h2>
@@ -365,8 +370,9 @@ const App: React.FC = () => {
             </div>
           </main>
         </motion.div>
-      )}
-    </AnimatePresence>
+      } />
+    </Routes>
+  </AnimatePresence>
   );
 };
 
