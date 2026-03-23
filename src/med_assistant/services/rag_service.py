@@ -6,6 +6,7 @@ import torch
 
 from med_assistant.core.config import settings
 from med_assistant.services.llm_service import load_model_and_pipeline
+from med_assistant.services.evaluation_service import EvaluatorService
 from langchain.prompts import PromptTemplate
 
 class RAGService:
@@ -13,6 +14,7 @@ class RAGService:
         self.llm = None
         self.qa_chain = None
         self.vectordb = None
+        self.evaluator = None # Initialize evaluator attribute
 
     def initialize(self):
         """
@@ -22,6 +24,9 @@ class RAGService:
         # 1. Load LLM
         hf_pipeline = load_model_and_pipeline()
         self.llm = HuggingFacePipeline(pipeline=hf_pipeline)
+
+        # 1.1 Initialize Evaluator
+        self.evaluator = EvaluatorService(hf_pipeline)
 
         # 2. Load Embeddings
         # Check device for embedding model
@@ -80,4 +85,27 @@ Detailed Evidence-Based Answer:"""
         if not self.qa_chain:
             raise RuntimeError("RAG Service is not initialized.")
         
-        return self.qa_chain(question)
+        raw_result = self.qa_chain(question)
+        
+        answer = raw_result["result"]
+        source_docs = raw_result["source_documents"]
+        
+        # Format sources
+        sources = [
+            {"page_content": doc.page_content, "metadata": doc.metadata}
+            for doc in source_docs
+        ]
+        
+        # Perform real-time evaluation for Clinical Reliability
+        context_str = "\n".join([doc.page_content for doc in source_docs])
+        eval_results = self.evaluator.evaluate_response(question, context_str, answer)
+        
+        return {
+            "answer": answer,
+            "sources": sources,
+            "confidence": eval_results["confidence_score"],
+            "metrics": {
+                "faithfulness": eval_results["faithfulness"],
+                "relevance": eval_results["relevance"]
+            }
+        }

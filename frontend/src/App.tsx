@@ -68,6 +68,8 @@ const App: React.FC = () => {
         sources: response.source_documents,
         timestamp: Date.now(),
         total_time: response.total_time,
+        confidence: response.confidence, // Add confidence
+        metrics: response.metrics,       // Add metrics
       };
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
@@ -313,24 +315,32 @@ const App: React.FC = () => {
                       </div>
                     )}
                     
-                    {msg.total_time && (
-                      <div style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '4px', 
-                        fontSize: '0.7rem', 
-                        color: 'var(--text-muted)', 
-                        marginTop: '6px', 
-                        alignSelf: 'flex-start',
-                        background: '#f1f5f9',
-                        padding: '2px 8px',
-                        borderRadius: '100px'
-                      }}>
-                        <Timer size={12} />
-                        <span>Response Time: {msg.total_time}</span>
-                        <span style={{ margin: '0 4px', opacity: 0.3 }}>|</span>
-                        <ShieldCheck size={12} color="#10b981" />
-                        <span style={{ color: '#059669', fontWeight: 500 }}>Accuracy Focused</span>
+                    {msg.confidence !== undefined && (
+                      <div className="trust-indicator-container">
+                        <div className="trust-score-badge" style={{
+                          background: msg.confidence > 0.8 ? '#ecfdf5' : (msg.confidence > 0.5 ? '#fffbeb' : '#fef2f2'),
+                          color: msg.confidence > 0.8 ? '#065f46' : (msg.confidence > 0.5 ? '#92400e' : '#991b1b'),
+                          border: `1px solid ${msg.confidence > 0.8 ? '#10b981' : (msg.confidence > 0.5 ? '#f59e0b' : '#ef4444')}`
+                        }}>
+                          <ShieldCheck size={14} />
+                          <span className="trust-label">Trust Score: {Math.round(msg.confidence * 100)}%</span>
+                          <div className="trust-tooltip">
+                            <div className="tooltip-item">
+                              <span>Faithfulness:</span>
+                              <strong>{Math.round((msg.metrics?.faithfulness || 0) * 100)}%</strong>
+                            </div>
+                            <div className="tooltip-item">
+                              <span>Relevance:</span>
+                              <strong>{Math.round((msg.metrics?.relevance || 0) * 100)}%</strong>
+                            </div>
+                          </div>
+                        </div>
+                        {msg.total_time && (
+                          <div className="response-meta">
+                            <Timer size={12} />
+                            <span>{msg.total_time}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

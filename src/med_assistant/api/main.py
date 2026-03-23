@@ -47,15 +47,14 @@ async def query_endpoint(request: QueryRequest):
     try:
         response = rag_service.answer_question(request.question)
         
-        answer_text = response.get('result', str(response))
+        answer_text = response.get('answer', "No answer generated.")
         source_docs = []
         
-        if 'source_documents' in response:
-            for doc in response['source_documents']:
-                source_docs.append(DocumentSource(
-                    page_content=doc.page_content,
-                    metadata=doc.metadata
-                ))
+        for doc in response.get('sources', []):
+            source_docs.append(DocumentSource(
+                page_content=doc['page_content'],
+                metadata=doc['metadata']
+            ))
 
         total_time = f"{round(time() - start_time, 3)} sec"
 
@@ -63,7 +62,9 @@ async def query_endpoint(request: QueryRequest):
             question=request.question,
             answer=answer_text,
             source_documents=source_docs,
-            total_time=total_time
+            total_time=total_time,
+            confidence=response.get('confidence', 1.0),
+            metrics=response.get('metrics', {})
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

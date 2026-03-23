@@ -14,6 +14,11 @@ export interface Message {
   sources?: DocumentSource[];
   timestamp: number;
   total_time?: string;
+  confidence?: number;
+  metrics?: {
+    faithfulness: number;
+    relevance: number;
+  };
 }
 
 export interface QueryRequest {
@@ -25,6 +30,11 @@ export interface QueryResponse {
   answer: string;
   source_documents: DocumentSource[];
   total_time: string;
+  confidence: number;
+  metrics: {
+    faithfulness: number;
+    relevance: number;
+  };
 }
 
 export interface IngestionLog {
