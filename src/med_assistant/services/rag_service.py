@@ -47,7 +47,7 @@ class RAGService:
         # Increased k to 6 and enabled MMR for better context variety and accuracy
         retriever = self.vectordb.as_retriever(
             search_type="mmr",
-            search_kwargs={"k": 6, "fetch_k": 20, "lambda_mult": 0.5}
+            search_kwargs={"k": 3, "fetch_k": 20, "lambda_mult": 0.5}
         )
 
         template = """
@@ -97,7 +97,11 @@ Detailed Evidence-Based Answer:"""
         ]
         
         # Perform real-time evaluation for Clinical Reliability
+        # Truncate context to a safe length for LLM evaluation (approx 1500 tokens / 6000 chars)
         context_str = "\n".join([doc.page_content for doc in source_docs])
+        if len(context_str) > 6000:
+            context_str = context_str[:6000] + "... [context truncated]"
+            
         eval_results = self.evaluator.evaluate_response(question, context_str, answer)
         
         return {
