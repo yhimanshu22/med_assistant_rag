@@ -10,7 +10,7 @@ class EvaluatorService:
     def __init__(self, llm_pipeline):
         self.llm_pipeline = llm_pipeline
 
-    def evaluate_response(self, query: strangely, context: str, answer: str) -> Dict[str, float]:
+    def evaluate_response(self, query: str, context: str, answer: str) -> Dict[str, float]:
         """
         Evaluate the faithfulness and relevance of the answer.
         Returns a dictionary with scores between 0 and 1.
