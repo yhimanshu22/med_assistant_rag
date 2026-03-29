@@ -1,5 +1,5 @@
 from langchain_huggingface import HuggingFacePipeline, HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
 from langchain_chroma import Chroma
 
 import torch
@@ -72,22 +72,37 @@ Detailed Evidence-Based Answer:"""
 
         QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
-        self.qa_chain = RetrievalQA.from_chain_type(
+        condense_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+
+Chat History:
+{chat_history}
+Follow Up Input: {question}
+Standalone question:"""
+        CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
+
+        self.qa_chain = ConversationalRetrievalChain.from_llm(
             llm=self.llm,
-            chain_type="stuff",
             retriever=retriever,
+            combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT},
+            condense_question_prompt=CONDENSE_QUESTION_PROMPT,
             return_source_documents=True,
-            chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
             verbose=True
         )
         print("RAG Service initialized.")
 
-    def answer_question(self, question: str):
+    def answer_question(self, question: str, chat_history: list = None):
         if not self.qa_chain:
             raise RuntimeError("RAG Service is not initialized.")
         
+        # Convert list of dicts to list of tuples for LangChain ConversationalRetrievalChain
+        formatted_history = []
+        if chat_history:
+            for i in range(0, len(chat_history) - 1, 2):
+                if i + 1 < len(chat_history):
+                    formatted_history.append((chat_history[i]["content"], chat_history[i+1]["content"]))
+
         try:
-            raw_result = self.qa_chain(question)
+            raw_result = self.qa_chain({"question": question, "chat_history": formatted_history})
         except Exception as e:
             print(f"Error in QA Chain: {e}")
             return {
@@ -97,7 +112,8 @@ Detailed Evidence-Based Answer:"""
                 "metrics": {"faithfulness": 0.0, "relevance": 0.0}
             }
         
-        answer = raw_result["result"]
+        answer = raw_result["answer"]
+        source_docs = raw_result.get("source_documents", [])
         # If using a ChatModel like Groq, the result might be an AIMessage object
         if hasattr(answer, 'content'):
             answer = str(answer.content)

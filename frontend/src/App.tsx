@@ -46,7 +46,21 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    const savedMessages = localStorage.getItem('medassist_chat_history');
+    if (savedMessages) {
+      try {
+        setMessages(JSON.parse(savedMessages));
+      } catch (e) {
+        console.error('Failed to parse saved messages:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
+    if (messages.length > 0) {
+      localStorage.setItem('medassist_chat_history', JSON.stringify(messages));
+    }
   }, [messages]);
 
   const handleSend = async () => {
@@ -62,8 +76,13 @@ const App: React.FC = () => {
     setInput('');
     setIsLoading(true);
 
+    const chatHistory = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
     try {
-      const response = await queryMedicalAssistant(input);
+      const response = await queryMedicalAssistant(input, chatHistory);
       const assistantMessage: Message = {
         role: 'assistant',
         content: response.answer,
@@ -121,6 +140,7 @@ const App: React.FC = () => {
   const clearChat = () => {
     setMessages([]);
     setExpandedSources({});
+    localStorage.removeItem('medassist_chat_history');
   };
 
   const navigate = useNavigate();

@@ -49,7 +49,7 @@ async def query_endpoint(request: QueryRequest):
 
     start_time = time()
     try:
-        response = rag_service.answer_question(request.question)
+        response = rag_service.answer_question(request.question, request.chat_history)
         
         answer_text = response.get('answer', "No answer generated.")
         source_docs = []

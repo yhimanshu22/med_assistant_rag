@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 
 class QueryRequest(BaseModel):
     question: str
+    chat_history: Optional[List[Dict[str, str]]] = []
 
 class DocumentSource(BaseModel):
     page_content: str

@@ -10,8 +10,8 @@ const api = axios.create({
   },
 });
 
-export const queryMedicalAssistant = async (question: string): Promise<QueryResponse> => {
-  const response = await api.post<QueryResponse>('/query', { question });
+export const queryMedicalAssistant = async (question: string, chat_history?: { role: string; content: string }[]): Promise<QueryResponse> => {
+  const response = await api.post<QueryResponse>('/query', { question, chat_history });
   return response.data;
 };
 

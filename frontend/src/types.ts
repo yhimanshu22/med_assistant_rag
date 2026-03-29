@@ -23,6 +23,7 @@ export interface Message {
 
 export interface QueryRequest {
   question: string;
+  chat_history?: { role: string; content: string }[];
 }
 
 export interface QueryResponse {
