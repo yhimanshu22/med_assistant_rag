@@ -60,6 +60,7 @@ INSTRUCTIONS:
 3. Maintain a professional, clinical, and helpful tone.
 4. If there are conflicting details in the context, mention them.
 5. Do NOT hallucinate or use outside knowledge that isn't supported by the context.
+6. Use Markdown (headers, bullet points, and bold text) to structure your answer for professional clarity and readability.
 
 Context:
 {context}

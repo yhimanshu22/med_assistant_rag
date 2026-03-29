@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import './App.css';
 
 const App: React.FC = () => {
@@ -268,7 +270,11 @@ const App: React.FC = () => {
                     </div>
                     <div className="message-bubble">
                       {msg.role === 'assistant' ? (
-                        <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                        <div className="markdown-content">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
                       ) : (
                         msg.content
                       )}
