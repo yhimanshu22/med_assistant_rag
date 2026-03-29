@@ -341,6 +341,17 @@ const App: React.FC = () => {
                             <span>{msg.total_time}</span>
                           </div>
                         )}
+                        
+                        <div className="evaluation-metrics-row">
+                          <div className="metric-chip faithfulness" title="Faithfulness (Groundedness)">
+                            <FileCheck size={12} />
+                            <span>Faith: {Math.round((msg.metrics?.faithfulness || 0) * 100)}%</span>
+                          </div>
+                          <div className="metric-chip relevance" title="Answer Relevance">
+                            <Search size={12} />
+                            <span>Rel: {Math.round((msg.metrics?.relevance || 0) * 100)}%</span>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

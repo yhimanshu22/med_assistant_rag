@@ -25,6 +25,8 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "pydantic>=2.0.0",
     "typing-extensions>=4.0.0",
+    "ragas>=0.4.3",
+    "datasets>=4.8.4",
 ]
 
 [project.optional-dependencies]

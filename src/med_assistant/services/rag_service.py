@@ -25,9 +25,6 @@ class RAGService:
         hf_pipeline = load_model_and_pipeline()
         self.llm = HuggingFacePipeline(pipeline=hf_pipeline)
 
-        # 1.1 Initialize Evaluator
-        self.evaluator = EvaluatorService(hf_pipeline)
-
         # 2. Load Embeddings
         # Check device for embedding model
         model_kwargs = {"device": "cuda" if torch.cuda.is_available() else "cpu"}
@@ -38,6 +35,9 @@ class RAGService:
             encode_kwargs=encode_kwargs,
             cache_folder=settings.MODEL_CACHE_DIR
         )
+
+        # 1.1 Initialize Evaluator (Now moved after embeddings)
+        self.evaluator = EvaluatorService(hf_pipeline, embeddings)
 
         # 3. Load VectorDB
         print(f"Loading ChromaDB from {settings.DB_DIR}...")
