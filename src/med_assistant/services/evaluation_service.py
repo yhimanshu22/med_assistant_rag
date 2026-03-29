@@ -4,7 +4,7 @@ import pandas as pd
 from datasets import Dataset
 
 # Ragas imports
-from ragas import evaluate
+from ragas import evaluate, RunConfig
 from ragas.metrics import faithfulness, answer_relevancy
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
@@ -28,9 +28,12 @@ class EvaluatorService:
         self.metrics = [faithfulness, answer_relevancy]
         for metric in self.metrics:
             metric.llm = self.llm
-            # Ensure the internal LLM wrapper for the metric also respects n=1 if possible
+            # Ensure the internal LLM wrapper for the metric also respects n=1
+            # Some Ragas versions might use different attribute names, so we set it where possible
             if hasattr(metric.llm, 'n'):
                 metric.llm.n = 1
+            if hasattr(metric.llm, 'llm') and hasattr(metric.llm.llm, 'n'):
+                metric.llm.llm.n = 1
             if hasattr(metric, 'embeddings'):
                 metric.embeddings = self.embeddings
 
@@ -55,7 +58,8 @@ class EvaluatorService:
                 dataset=dataset,
                 metrics=self.metrics,
                 llm=self.llm,
-                embeddings=self.embeddings
+                embeddings=self.embeddings,
+                run_config=RunConfig(max_workers=1)
             )
             
             # Helper to safely extract and convert scores

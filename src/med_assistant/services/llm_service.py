@@ -5,6 +5,28 @@ from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFacePipeline
 from med_assistant.core.config import settings
 
+class GroqSafeWrapper(ChatGroq):
+    """
+    A wrapper for ChatGroq that strictly enforces n=1 on all generation calls.
+    This prevents Ragas or other libraries from overriding 'n' with values > 1,
+    which are not supported by some Groq models.
+    """
+    def _generate(self, *args, **kwargs):
+        kwargs["n"] = 1
+        return super()._generate(*args, **kwargs)
+
+    async def _agenerate(self, *args, **kwargs):
+        kwargs["n"] = 1
+        return await super()._agenerate(*args, **kwargs)
+    
+    def generate(self, *args, **kwargs):
+        kwargs["n"] = 1
+        return super().generate(*args, **kwargs)
+        
+    async def agenerate(self, *args, **kwargs):
+        kwargs["n"] = 1
+        return await super().agenerate(*args, **kwargs)
+
 def get_llm():
 
     """
@@ -15,11 +37,12 @@ def get_llm():
     if settings.USE_GROQ and settings.GROQ_API_KEY:
         print(f"Initializing Groq LLM: {settings.GROQ_MODEL_ID}")
         try:
-            return ChatGroq(
+            return GroqSafeWrapper(
                 groq_api_key=settings.GROQ_API_KEY,
                 model_name=settings.GROQ_MODEL_ID,
                 temperature=0.1,
-                max_tokens=1024
+                max_tokens=1024,
+                n=1
             )
 
 

@@ -48,13 +48,9 @@ def ingest_documents_generator():
                 if (i + 1) % 50 == 0:
                     yield json.dumps({"step": "processing", "file": os.path.basename(pdf_file), "message": f"  Loaded {i + 1}/{total_pages} pages..."})
                 
-                # Keep the limit for performance
-                if i >= 5:
-                    yield json.dumps({"step": "processing", "file": os.path.basename(pdf_file), "message": "  Stopping at 5 pages for quick testing."})
-                    break
-            
             yield json.dumps({"step": "processing", "file": os.path.basename(pdf_file), "message": f"  Finished loading {len(file_docs)} pages from {os.path.basename(pdf_file)}."})
             documents.extend(file_docs)
+
             
         except Exception as e:
             yield json.dumps({"step": "processing", "file": os.path.basename(pdf_file), "message": f"Error reading {os.path.basename(pdf_file)}: {e}", "status": "error"})

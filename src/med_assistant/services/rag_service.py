@@ -85,7 +85,16 @@ Detailed Evidence-Based Answer:"""
         if not self.qa_chain:
             raise RuntimeError("RAG Service is not initialized.")
         
-        raw_result = self.qa_chain(question)
+        try:
+            raw_result = self.qa_chain(question)
+        except Exception as e:
+            print(f"Error in QA Chain: {e}")
+            return {
+                "answer": f"I encountered an error while processing your request: {str(e)}",
+                "sources": [],
+                "confidence": 0.0,
+                "metrics": {"faithfulness": 0.0, "relevance": 0.0}
+            }
         
         answer = raw_result["result"]
         # If using a ChatModel like Groq, the result might be an AIMessage object

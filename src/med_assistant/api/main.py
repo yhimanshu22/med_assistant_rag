@@ -7,6 +7,10 @@ from contextlib import asynccontextmanager
 from time import time
 import uvicorn
 import asyncio
+import traceback
+import logging
+
+logger = logging.getLogger(__name__)
 
 from med_assistant.models.schemas import QueryRequest, QueryResponse, DocumentSource
 from med_assistant.services.rag_service import RAGService
@@ -67,6 +71,8 @@ async def query_endpoint(request: QueryRequest):
             metrics=response.get('metrics', {})
         )
     except Exception as e:
+        logger.error(f"Error in query endpoint: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ingest")
