@@ -3,6 +3,11 @@ import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFacePipeline
+from typing import List, Optional, Any, Dict
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
+from langchain_core.callbacks import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from med_assistant.core.config import settings
 
 class GroqSafeWrapper(ChatGroq):
@@ -27,6 +32,78 @@ class GroqSafeWrapper(ChatGroq):
         kwargs["n"] = 1
         return await super().agenerate(*args, **kwargs)
 
+class RobustFallbackLLM(BaseChatModel):
+    primary: Any
+    secondary: Any
+
+    def _format_messages(self, messages: List[BaseMessage]) -> str:
+        """Simple formatter to convert messages to a string for local LLMs."""
+        prompt = ""
+        for m in messages:
+            role = "Human" if m.type == "human" else "Assistant" if m.type == "ai" else "System"
+            prompt += f"{role}: {m.content}\n\n"
+        return prompt.strip()
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            # Force n=1 for ChatGroq
+            kwargs["n"] = 1
+            if hasattr(self.primary, "_generate"):
+                return self.primary._generate(messages, stop, run_manager, **kwargs)
+            return self.primary.invoke(messages, **kwargs)
+        except Exception as e:
+            if "429" in str(e) or "rate limit" in str(e).lower() or "overloaded" in str(e).lower() or "not completed" in str(e).lower():
+                print(f"!!! Groq Rate Limit/Error: {e}. Falling back to LOCAL LLM.")
+                
+                # Format prompt for secondary (usually a BaseLLM like HuggingFacePipeline)
+                prompt = self._format_messages(messages)
+                res = self.secondary.invoke(prompt, stop=stop)
+                
+                from langchain_core.outputs import ChatGeneration
+                from langchain_core.messages import AIMessage
+                
+                content = res if isinstance(res, str) else str(res)
+                return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+            raise e
+
+    async def _agenerate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            # Force n=1 for ChatGroq
+            kwargs["n"] = 1
+            if hasattr(self.primary, "_agenerate"):
+                return await self.primary._agenerate(messages, stop, run_manager, **kwargs)
+            return await self.primary.ainvoke(messages, **kwargs)
+        except Exception as e:
+            if "429" in str(e) or "rate limit" in str(e).lower() or "overloaded" in str(e).lower() or "not completed" in str(e).lower():
+                print(f"!!! Groq Async Rate Limit/Error: {e}. Falling back to LOCAL LLM.")
+                
+                prompt = self._format_messages(messages)
+                res = await self.secondary.ainvoke(prompt, stop=stop)
+                
+                from langchain_core.outputs import ChatGeneration
+                from langchain_core.messages import AIMessage
+                
+                content = res if isinstance(res, str) else str(res)
+                return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content))])
+            raise e
+
+    @property
+    def _llm_type(self) -> str:
+        return "robust_fallback_llm"
+
+
 def get_llm():
 
     """
@@ -34,25 +111,32 @@ def get_llm():
     Tries Groq first if enabled and API key is present.
     Falls back to local HuggingFace model.
     """
+    # 1. Initialize Groq
+    groq_llm = None
     if settings.USE_GROQ and settings.GROQ_API_KEY:
         print(f"Initializing Groq LLM: {settings.GROQ_MODEL_ID}")
         try:
-            return GroqSafeWrapper(
+            groq_llm = GroqSafeWrapper(
                 groq_api_key=settings.GROQ_API_KEY,
                 model_name=settings.GROQ_MODEL_ID,
                 temperature=0.1,
                 max_tokens=4096,
                 n=1
             )
-
-
         except Exception as e:
-            print(f"Failed to initialize Groq, falling back to local: {e}")
+            print(f"Failed to initialize Groq, using local as primary: {e}")
 
-    # Fallback to Local
+    # 2. Initialize Local (Either as fallback or primary)
     print("Initializing Local HuggingFace LLM...")
     hf_pipeline = load_local_pipeline()
-    return HuggingFacePipeline(pipeline=hf_pipeline)
+    local_llm = HuggingFacePipeline(pipeline=hf_pipeline)
+
+    # 3. Return Fallback Wrapper or Local Primary
+    if groq_llm:
+        # Use our custom RobustFallbackLLM that works better with Ragas/LangChain internals
+        return RobustFallbackLLM(primary=groq_llm, secondary=local_llm)
+    
+    return local_llm
 
 def load_local_pipeline():
     """

@@ -11,18 +11,20 @@ import {
   Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Message, IngestionLog } from './types';
+import type { Message, IngestionLog, Conversation } from './types';
 import { queryMedicalAssistant, ingestDocuments } from './api';
 import { 
-  CheckCircle2, 
-  AlertCircle, 
+  Plus,
+  MessageSquare,
   Search, 
   Cpu, 
   Database, 
   Layers, 
   FileCheck,
   Timer,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2, 
+  AlertCircle
 } from 'lucide-react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
@@ -31,7 +33,12 @@ import remarkGfm from 'remark-gfm';
 import './App.css';
 
 const App: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  
+  const activeConversation = conversations.find(c => c.id === activeConversationId);
+  const messages = activeConversation?.messages || [];
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isIngesting, setIsIngesting] = useState(false);
@@ -45,23 +52,73 @@ const App: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const startNewChat = () => {
+    const newId = Date.now().toString();
+    const newConv: Conversation = {
+      id: newId,
+      title: 'New Chat',
+      messages: [],
+      timestamp: Date.now()
+    };
+    setConversations(prev => [newConv, ...prev]);
+    setActiveConversationId(newId);
+    setExpandedSources({});
+  };
+
+  const updateActiveConversation = (updateFn: (msgs: Message[]) => Message[]) => {
+    let currentId = activeConversationId;
+    
+    if (!currentId) {
+      const newId = Date.now().toString();
+      const newConv: Conversation = {
+        id: newId,
+        title: 'New Chat',
+        messages: updateFn([]),
+        timestamp: Date.now()
+      };
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newId);
+      return;
+    }
+
+    setConversations(prev => prev.map(c => {
+      if (c.id === currentId) {
+        const newMessages = updateFn(c.messages);
+        let title = c.title;
+        if (title === 'New Chat' && newMessages.length > 0 && newMessages[0].role === 'user') {
+          title = newMessages[0].content.slice(0, 30) + (newMessages[0].content.length > 30 ? '...' : '');
+        }
+        return { ...c, messages: newMessages, title, timestamp: Date.now() };
+      }
+      return c;
+    }));
+  };
+
   useEffect(() => {
-    const savedMessages = localStorage.getItem('medassist_chat_history');
-    if (savedMessages) {
+    const savedConversations = localStorage.getItem('medassist_conversations');
+    const savedActiveId = localStorage.getItem('medassist_active_id');
+    
+    if (savedConversations) {
       try {
-        setMessages(JSON.parse(savedMessages));
+        const parsed = JSON.parse(savedConversations);
+        setConversations(parsed);
+        if (savedActiveId) setActiveConversationId(savedActiveId);
+        else if (parsed.length > 0) setActiveConversationId(parsed[0].id);
       } catch (e) {
-        console.error('Failed to parse saved messages:', e);
+        console.error('Failed to parse saved conversations:', e);
       }
     }
   }, []);
 
   useEffect(() => {
     scrollToBottom();
-    if (messages.length > 0) {
-      localStorage.setItem('medassist_chat_history', JSON.stringify(messages));
+    if (conversations.length > 0) {
+      localStorage.setItem('medassist_conversations', JSON.stringify(conversations));
+      if (activeConversationId) {
+        localStorage.setItem('medassist_active_id', activeConversationId);
+      }
     }
-  }, [messages]);
+  }, [conversations, activeConversationId]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -72,7 +129,7 @@ const App: React.FC = () => {
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    updateActiveConversation(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
@@ -89,10 +146,10 @@ const App: React.FC = () => {
         sources: response.source_documents,
         timestamp: Date.now(),
         total_time: response.total_time,
-        confidence: response.confidence, // Add confidence
-        metrics: response.metrics,       // Add metrics
+        confidence: response.confidence,
+        metrics: response.metrics,
       };
-      setMessages(prev => [...prev, assistantMessage]);
+      updateActiveConversation(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error fetching response:', error);
       const errorMessage: Message = {
@@ -100,7 +157,7 @@ const App: React.FC = () => {
         content: 'Sorry, I encountered an error while processing your request. Please ensure the backend server is running.',
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      updateActiveConversation(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -138,9 +195,13 @@ const App: React.FC = () => {
   };
 
   const clearChat = () => {
-    setMessages([]);
+    if (activeConversationId) {
+      setConversations(prev => prev.filter(c => c.id !== activeConversationId));
+      const remaining = conversations.filter(c => c.id !== activeConversationId);
+      if (remaining.length > 0) setActiveConversationId(remaining[0].id);
+      else setActiveConversationId(null);
+    }
     setExpandedSources({});
-    localStorage.removeItem('medassist_chat_history');
   };
 
   const navigate = useNavigate();
@@ -172,11 +233,37 @@ const App: React.FC = () => {
             <aside className="sidebar">
               <div className="sidebar-header">
                 <Stethoscope size={32} color="var(--primary)" strokeWidth={2.5} />
-                <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist RAG</h1>
+                <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist</h1>
               </div>
 
-            <div className="sidebar-section">
-              <h2>Document Management</h2>
+              <button className="btn-new-chat" onClick={startNewChat}>
+                <Plus size={18} />
+                New Conversation
+              </button>
+
+              <div className="sidebar-section history-section">
+                <h2>Recent Conversations</h2>
+                <div className="conversation-list">
+                  {conversations.map(conv => (
+                    <div 
+                      key={conv.id} 
+                      className={`conversation-item ${conv.id === activeConversationId ? 'active' : ''}`}
+                      onClick={() => setActiveConversationId(conv.id)}
+                    >
+                      <MessageSquare size={16} />
+                      <span className="conversation-title">{conv.title}</span>
+                    </div>
+                  ))}
+                  {conversations.length === 0 && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                      No recent chats
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="sidebar-section">
+                <h2>Document Management</h2>
               <div 
                 className="upload-area"
                 onClick={() => fileInputRef.current?.click()}

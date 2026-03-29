@@ -21,6 +21,13 @@ export interface Message {
   };
 }
 
+export interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  timestamp: number;
+}
+
 export interface QueryRequest {
   question: string;
   chat_history?: { role: string; content: string }[];
