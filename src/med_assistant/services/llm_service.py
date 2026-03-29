@@ -1,19 +1,48 @@
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
+from langchain_groq import ChatGroq
+from langchain_huggingface import HuggingFacePipeline
 from med_assistant.core.config import settings
 
-def load_model_and_pipeline():
+def get_llm():
+
     """
-    Loads the model and tokenizer.
+    Returns an LLM instance. 
+    Tries Groq first if enabled and API key is present.
+    Falls back to local HuggingFace model.
+    """
+    if settings.USE_GROQ and settings.GROQ_API_KEY:
+        print(f"Initializing Groq LLM: {settings.GROQ_MODEL_ID}")
+        try:
+            return ChatGroq(
+                groq_api_key=settings.GROQ_API_KEY,
+                model_name=settings.GROQ_MODEL_ID,
+                temperature=0.1,
+                max_tokens=1024
+            )
+
+
+        except Exception as e:
+            print(f"Failed to initialize Groq, falling back to local: {e}")
+
+    # Fallback to Local
+    print("Initializing Local HuggingFace LLM...")
+    hf_pipeline = load_local_pipeline()
+    return HuggingFacePipeline(pipeline=hf_pipeline)
+
+def load_local_pipeline():
+    """
+    Loads the local model and tokenizer.
     Adapts to CPU or GPU availability.
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Device detected: {device}")
-
+    print(f"Local Device detected: {device}")
+    
+    # ... existing local loading logic ...
     if device == "cuda":
         model_id = settings.GPU_MODEL_ID
-        print(f"Loading {model_id} with 4-bit quantization (checking cache: {settings.MODEL_CACHE_DIR})...")
+        # ... logic as before ...
         try:
             from torch import bfloat16
             bnb_config = transformers.BitsAndBytesConfig(
@@ -38,7 +67,6 @@ def load_model_and_pipeline():
             raise e
     else:
         model_id = settings.CPU_MODEL_ID
-        print(f"Loading {model_id} for CPU usage (checking cache: {settings.MODEL_CACHE_DIR})...")
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             trust_remote_code=True,
@@ -49,16 +77,13 @@ def load_model_and_pipeline():
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=settings.MODEL_CACHE_DIR)
     
-    query_pipeline = transformers.pipeline(
+    return transformers.pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        torch_dtype=torch.float16 if device == "cuda" else torch.bfloat16,
         max_new_tokens=256,
-        device_map=device,
         do_sample=False,
         repetition_penalty=1.1,
         return_full_text=False
     )
-    
-    return query_pipeline
+

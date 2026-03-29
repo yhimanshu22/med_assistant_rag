@@ -10,7 +10,13 @@ class Settings(BaseSettings):
     GPU_MODEL_ID: str = "meta-llama/Meta-Llama-3-8B-Chat"
     CPU_MODEL_ID: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     
+    # Groq Settings
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL_ID: str = "llama-3.3-70b-versatile"
+    USE_GROQ: bool = True
+    
     class Config:
+
         env_file = ".env"
 
 settings = Settings()

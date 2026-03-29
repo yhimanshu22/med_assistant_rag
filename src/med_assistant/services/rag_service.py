@@ -5,7 +5,7 @@ from langchain_chroma import Chroma
 import torch
 
 from med_assistant.core.config import settings
-from med_assistant.services.llm_service import load_model_and_pipeline
+from med_assistant.services.llm_service import get_llm
 from med_assistant.services.evaluation_service import EvaluatorService
 from langchain.prompts import PromptTemplate
 
@@ -19,11 +19,11 @@ class RAGService:
     def initialize(self):
         """
         Initializes the Model and RAG chain. 
-        This is heavy and should be done on startup.
+        Tries Groq first, then falls back to local.
         """
-        # 1. Load LLM
-        hf_pipeline = load_model_and_pipeline()
-        self.llm = HuggingFacePipeline(pipeline=hf_pipeline)
+        # 1. Get LLM (Groq or Local)
+        self.llm = get_llm()
+
 
         # 2. Load Embeddings
         # Check device for embedding model
@@ -36,8 +36,8 @@ class RAGService:
             cache_folder=settings.MODEL_CACHE_DIR
         )
 
-        # 1.1 Initialize Evaluator (Now moved after embeddings)
-        self.evaluator = EvaluatorService(hf_pipeline, embeddings)
+        # 1.1 Initialize Evaluator using the selected LLM (Groq or Local)
+        self.evaluator = EvaluatorService(self.llm, embeddings)
 
         # 3. Load VectorDB
         print(f"Loading ChromaDB from {settings.DB_DIR}...")
@@ -88,7 +88,14 @@ Detailed Evidence-Based Answer:"""
         raw_result = self.qa_chain(question)
         
         answer = raw_result["result"]
+        # If using a ChatModel like Groq, the result might be an AIMessage object
+        if hasattr(answer, 'content'):
+            answer = str(answer.content)
+        else:
+            answer = str(answer)
+            
         source_docs = raw_result["source_documents"]
+
         
         # Format sources
         sources = [

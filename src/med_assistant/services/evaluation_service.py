@@ -16,20 +16,25 @@ logger = logging.getLogger(__name__)
 class EvaluatorService:
     """Service to evaluate the clinical reliability of RAG responses using Ragas."""
 
-    def __init__(self, hf_pipeline, hf_embeddings):
+    def __init__(self, llm, embeddings):
         """
-        Initialize with a HuggingFace pipeline and embeddings.
+        Initialize with a LangChain LLM and embeddings.
+        Compatible with both ChatGroq and HuggingFacePipeline.
         """
-        # Wrap HF pipeline for Ragas
-        self.llm = LangchainLLMWrapper(HuggingFacePipeline(pipeline=hf_pipeline))
-        self.embeddings = LangchainEmbeddingsWrapper(hf_embeddings)
+        self.llm = LangchainLLMWrapper(llm)
+        self.embeddings = LangchainEmbeddingsWrapper(embeddings)
         
-        # Configure metrics to use our local LLM and embeddings
+        # Configure metrics
         self.metrics = [faithfulness, answer_relevancy]
         for metric in self.metrics:
             metric.llm = self.llm
+            # Ensure the internal LLM wrapper for the metric also respects n=1 if possible
+            if hasattr(metric.llm, 'n'):
+                metric.llm.n = 1
             if hasattr(metric, 'embeddings'):
                 metric.embeddings = self.embeddings
+
+
 
     def evaluate_response(self, query: str, context: str, answer: str) -> Dict[str, float]:
         """
@@ -53,13 +58,25 @@ class EvaluatorService:
                 embeddings=self.embeddings
             )
             
-            f_score = result["faithfulness"]
-            r_score = result["answer_relevancy"]
-            
-            # Map NaN to fallback if needed
-            f_score = f_score if not pd.isna(f_score) else 0.8
-            r_score = r_score if not pd.isna(r_score) else 0.8
+            # Helper to safely extract and convert scores
+            def safe_score(key, default=0.8):
+                try:
+                    # EvaluationResult can be accessed like a dict
+                    val = result[key]
+                    
+                    # If it's a list or sequence, take the first element
+                    if isinstance(val, (list, pd.Series)):
+                        val = val[0] if len(val) > 0 else default
+                    
+                    f_val = float(val)
+                    return f_val if not pd.isna(f_val) else default
+                except (KeyError, ValueError, TypeError, IndexError):
+                    return default
 
+            f_score = safe_score("faithfulness")
+            r_score = safe_score("answer_relevancy")
+
+            
             # Combined confidence score (weighted average)
             confidence_score = (f_score * 0.7) + (r_score * 0.3)
 
@@ -68,6 +85,7 @@ class EvaluatorService:
                 "relevance": float(r_score),
                 "confidence_score": float(confidence_score)
             }
+
         except Exception as e:
             logger.error(f"Error during Ragas evaluation: {e}")
             # Fallback to defaults
