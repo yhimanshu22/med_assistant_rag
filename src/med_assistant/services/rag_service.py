@@ -78,6 +78,7 @@ Chat History:
 {chat_history}
 Follow Up Input: {question}
 Standalone question:"""
+
         CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
 
         self.qa_chain = ConversationalRetrievalChain.from_llm(
