@@ -9,6 +9,10 @@ import uvicorn
 import asyncio
 import traceback
 import logging
+import json
+import uuid
+import threading
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +21,9 @@ from med_assistant.services.rag_service import RAGService
 from med_assistant.services.ingestion_service import ingest_documents_generator
 
 rag_service = RAGService()
+
+# Async ingestion job store (process-local)
+_ingest_jobs: Dict[str, Dict[str, Any]] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +51,7 @@ async def query_endpoint(request: QueryRequest):
     """
     Endpoint to query the RAG medical assistant.
     """
-    if not rag_service.qa_chain:
+    if not rag_service.llm or not rag_service.vectordb:
         raise HTTPException(status_code=503, detail="RAG Service not initialized. Check server logs.")
 
     start_time = time()
@@ -75,6 +82,32 @@ async def query_endpoint(request: QueryRequest):
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/query/stream")
+async def query_stream_endpoint(request: QueryRequest):
+    """
+    Streams answer chunks as newline-delimited JSON (NDJSON).
+    """
+    if not rag_service.llm or not rag_service.vectordb:
+        raise HTTPException(status_code=503, detail="RAG Service not initialized. Check server logs.")
+
+    async def generate():
+        loop = asyncio.get_running_loop()
+
+        def run_stream() -> List[str]:
+            lines: List[str] = []
+            for item in rag_service.answer_question_stream(request.question, request.chat_history):
+                lines.append(json.dumps(item))
+            return lines
+
+        try:
+            lines = await loop.run_in_executor(None, run_stream)
+            for line in lines:
+                yield line + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
+
 @app.post("/ingest")
 async def ingest_endpoint():
     """
@@ -96,6 +129,42 @@ async def ingest_endpoint():
             yield f"Error refreshing Database: {e}\n"
 
     return StreamingResponse(generate(), media_type="text/plain")
+
+@app.post("/ingest/async")
+async def ingest_async_endpoint():
+    """
+    Starts ingestion in the background and returns a job id.
+    Client can poll `/ingest/{job_id}` for status + logs.
+    """
+    job_id = uuid.uuid4().hex
+    _ingest_jobs[job_id] = {"status": "running", "logs": [], "started_at": time(), "ended_at": None, "error": None}
+
+    def run_job():
+        try:
+            for msg in ingest_documents_generator():
+                _ingest_jobs[job_id]["logs"].append(msg)
+            _ingest_jobs[job_id]["logs"].append(json.dumps({"step": "refresh", "message": "Reloading Vector Database indices..."}))
+            rag_service.initialize()
+            _ingest_jobs[job_id]["logs"].append(json.dumps({"step": "refresh", "message": "Database Refresh Complete."}))
+            _ingest_jobs[job_id]["status"] = "completed"
+        except Exception as e:
+            _ingest_jobs[job_id]["status"] = "failed"
+            _ingest_jobs[job_id]["error"] = str(e)
+            _ingest_jobs[job_id]["logs"].append(json.dumps({"step": "error", "message": str(e), "status": "error"}))
+        finally:
+            _ingest_jobs[job_id]["ended_at"] = time()
+
+    t = threading.Thread(target=run_job, daemon=True)
+    t.start()
+
+    return {"job_id": job_id, "status": "running"}
+
+@app.get("/ingest/{job_id}")
+async def ingest_status_endpoint(job_id: str):
+    job = _ingest_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 @app.post("/upload")
 async def upload_endpoint(file: UploadFile = File(...)):

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Message, IngestionLog, Conversation } from './types';
-import { queryMedicalAssistant, ingestDocuments } from './api';
+import { queryMedicalAssistantStream, ingestDocuments } from './api';
 import { 
   Plus,
   MessageSquare,
@@ -139,17 +139,63 @@ const App: React.FC = () => {
     }));
 
     try {
-      const response = await queryMedicalAssistant(input, chatHistory);
       const assistantMessage: Message = {
         role: 'assistant',
-        content: response.answer,
-        sources: response.source_documents,
+        content: '',
         timestamp: Date.now(),
-        total_time: response.total_time,
-        confidence: response.confidence,
-        metrics: response.metrics,
       };
       updateActiveConversation(prev => [...prev, assistantMessage]);
+
+      let finalSources: any[] | undefined;
+      let finalConfidence: number | undefined;
+      let finalMetrics: any | undefined;
+      let finalTotalTime: string | undefined;
+
+      await queryMedicalAssistantStream(input, chatHistory, (evt) => {
+        if (evt.type === 'meta') {
+          finalSources = evt.sources;
+          finalConfidence = evt.confidence;
+          finalMetrics = evt.metrics;
+          updateActiveConversation(prev => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              last.sources = finalSources as any;
+              last.confidence = finalConfidence;
+              last.metrics = finalMetrics;
+            }
+            return next;
+          });
+        } else if (evt.type === 'delta' && evt.text) {
+          updateActiveConversation(prev => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              last.content = (last.content || '') + evt.text;
+            }
+            return next;
+          });
+        } else if (evt.type === 'done') {
+          finalTotalTime = evt.total_time;
+          updateActiveConversation(prev => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              last.total_time = finalTotalTime;
+            }
+            return next;
+          });
+        } else if (evt.type === 'error') {
+          updateActiveConversation(prev => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              last.content = evt.message || 'Streaming error';
+            }
+            return next;
+          });
+        }
+      });
     } catch (error) {
       console.error('Error fetching response:', error);
       const errorMessage: Message = {

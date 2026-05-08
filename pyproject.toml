@@ -21,13 +21,12 @@ dependencies = [
     "chromadb",
     "pypdf>=3.10.0",
     "python-multipart>=0.0.6",
-    "streamlit>=1.25.0",
     "pydantic-settings>=2.0.0",
     "pydantic>=2.0.0",
     "typing-extensions>=4.0.0",
     "ragas>=0.4.3",
     "datasets>=4.8.4",
-    "langchain-groq>=0.3.2",
+    "rank-bm25>=0.2.2",
 ]
 
 [project.optional-dependencies]

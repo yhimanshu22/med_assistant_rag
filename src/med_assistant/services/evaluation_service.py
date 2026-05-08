@@ -19,7 +19,7 @@ class EvaluatorService:
     def __init__(self, llm, embeddings):
         """
         Initialize with a LangChain LLM and embeddings.
-        Compatible with both ChatGroq and HuggingFacePipeline.
+        Compatible with local HuggingFacePipeline (and other LangChain LLMs).
         """
         self.llm = LangchainLLMWrapper(llm)
         self.embeddings = LangchainEmbeddingsWrapper(embeddings)
@@ -38,6 +38,12 @@ class EvaluatorService:
                 metric.embeddings = self.embeddings
 
 
+def mydecorator(func):
+    def wrapper():
+        print("before ")
+        func()
+        print("after")
+    return wrapper    
 
     def evaluate_response(self, query: str, context: str, answer: str) -> Dict[str, float]:
         """
