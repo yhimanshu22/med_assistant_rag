@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     # Cross-encoder reranker model for relevance reranking
     RERANKER_MODEL_ID: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-    # Ragas faithfulness/relevance scoring adds multiple extra LLM calls per answer (very slow on CPU).
-    ENABLE_RAG_EVALUATION: bool = False
+    # Server master switch: if False, users cannot enable Ragas evaluation in the UI.
+    # Ragas adds multiple extra LLM calls per answer (very slow on CPU).
+    ENABLE_RAG_EVALUATION: bool = True
 
     # Auth
     DATABASE_URL: str = _DEFAULT_DATABASE_URL

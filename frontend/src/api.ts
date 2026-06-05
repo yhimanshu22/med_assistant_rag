@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { QueryResponse, IngestionLog } from './types';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'medassist_token';
 
 const getStoredToken = (): string | null => localStorage.getItem(TOKEN_KEY);
@@ -83,7 +83,7 @@ export const logout = async (token?: string): Promise<void> => {
 
 export interface HealthStatus {
   status: string;
-  evaluation_enabled: boolean;
+  evaluation_available: boolean;
 }
 
 export const getHealth = async (): Promise<HealthStatus> => {
@@ -110,11 +110,16 @@ export const queryMedicalAssistantStream = async (
   chat_history: { role: string; content: string }[] | undefined,
   onEvent: (evt: { type: string; text?: string; sources?: any; confidence?: number; metrics?: any; evaluation_enabled?: boolean; total_time?: string; message?: string }) => void,
   signal?: AbortSignal,
+  enableEvaluation: boolean = false,
 ): Promise<void> => {
   const response = await fetch(`${API_BASE_URL}/query/stream`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ question, chat_history }),
+    body: JSON.stringify({
+      question,
+      chat_history,
+      enable_evaluation: enableEvaluation,
+    }),
     signal,
   });
 

@@ -18,7 +18,9 @@ def test_query_endpoint_success(client, mock_rag_service):
     assert source["metadata"]["source"] == "mock_file.pdf"
     
     # Ensure our mock was called with the correct question
-    mock_rag_service.assert_called_once_with("What is Influenza?", [])
+    mock_rag_service.assert_called_once_with(
+        "What is Influenza?", [], enable_evaluation=False
+    )
 
 def test_query_endpoint_missing_question(client):
     """Test standard validation error for missing field."""

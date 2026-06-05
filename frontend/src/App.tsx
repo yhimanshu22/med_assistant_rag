@@ -54,20 +54,16 @@ const getTrustClass = (score: number) => {
 
 const ZERO_METRICS = { faithfulness: 0, relevance: 0 };
 
-const isMessageEvalOn = (msg: Message, globalEvalOn: boolean) =>
-  msg.evaluationEnabled === true || (msg.evaluationEnabled === undefined && globalEvalOn);
+const isMessageEvalOn = (msg: Message) => msg.evaluationEnabled === true;
 
-const getDisplayConfidence = (msg: Message, globalEvalOn: boolean) =>
-  isMessageEvalOn(msg, globalEvalOn) ? Math.round((msg.confidence || 0) * 100) : 0;
+const getDisplayConfidence = (msg: Message) =>
+  isMessageEvalOn(msg) ? Math.round((msg.confidence || 0) * 100) : 0;
 
-const getDisplayMetric = (
-  msg: Message,
-  key: 'faithfulness' | 'relevance',
-  globalEvalOn: boolean,
-) => (isMessageEvalOn(msg, globalEvalOn) ? Math.round((msg.metrics?.[key] || 0) * 100) : 0);
+const getDisplayMetric = (msg: Message, key: 'faithfulness' | 'relevance') =>
+  (isMessageEvalOn(msg) ? Math.round((msg.metrics?.[key] || 0) * 100) : 0);
 
-const normalizeStoredMessage = (msg: Message, globalEvalOn: boolean): Message => {
-  if (msg.role !== 'assistant' || isMessageEvalOn(msg, globalEvalOn)) {
+const normalizeStoredMessage = (msg: Message): Message => {
+  if (msg.role !== 'assistant' || isMessageEvalOn(msg)) {
     return msg;
   }
   return {
@@ -78,10 +74,10 @@ const normalizeStoredMessage = (msg: Message, globalEvalOn: boolean): Message =>
   };
 };
 
-const normalizeStoredConversations = (convs: Conversation[], globalEvalOn: boolean): Conversation[] =>
+const normalizeStoredConversations = (convs: Conversation[]): Conversation[] =>
   convs.map((c) => ({
     ...c,
-    messages: c.messages.map((m) => normalizeStoredMessage(m, globalEvalOn)),
+    messages: c.messages.map(normalizeStoredMessage),
   }));
 
 const ChatApp: React.FC = () => {
@@ -104,19 +100,26 @@ const ChatApp: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const prevActiveIdRef = useRef<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
-  const [evaluationEnabled, setEvaluationEnabled] = useState(false);
+  const [evaluationAvailable, setEvaluationAvailable] = useState(true);
+  const [userEvaluationEnabled, setUserEvaluationEnabled] = useState(
+    () => localStorage.getItem('medassist_user_evaluation') === 'true',
+  );
+
+  const handleEvaluationToggle = (enabled: boolean) => {
+    setUserEvaluationEnabled(enabled);
+    localStorage.setItem('medassist_user_evaluation', String(enabled));
+  };
 
   useEffect(() => {
     getHealth()
       .then((health) => {
-        const evalOn = health.evaluation_enabled;
-        setEvaluationEnabled(evalOn);
-        setConversations((prev) => normalizeStoredConversations(prev, evalOn));
+        const available = health.evaluation_available;
+        setEvaluationAvailable(available);
+        if (!available) {
+          handleEvaluationToggle(false);
+        }
       })
-      .catch(() => {
-        setEvaluationEnabled(false);
-        setConversations((prev) => normalizeStoredConversations(prev, false));
-      });
+      .catch(() => setEvaluationAvailable(false));
   }, []);
 
   const startNewChat = () => {
@@ -168,7 +171,7 @@ const ChatApp: React.FC = () => {
     if (savedConversations) {
       try {
         const parsed = JSON.parse(savedConversations) as Conversation[];
-        setConversations(normalizeStoredConversations(parsed, false));
+        setConversations(normalizeStoredConversations(parsed));
         if (savedActiveId) setActiveConversationId(savedActiveId);
         else if (parsed.length > 0) setActiveConversationId(parsed[0].id);
       } catch (e) {
@@ -252,15 +255,14 @@ const ChatApp: React.FC = () => {
       let finalEvaluationEnabled: boolean | undefined;
       let finalTotalTime: string | undefined;
 
+      const requestEvaluation = evaluationAvailable && userEvaluationEnabled;
+
       await queryMedicalAssistantStream(question, chatHistory, (evt) => {
         if (evt.type === 'meta') {
           finalSources = evt.sources;
           finalConfidence = evt.confidence;
           finalMetrics = evt.metrics;
           finalEvaluationEnabled = evt.evaluation_enabled ?? false;
-          if (evt.evaluation_enabled !== undefined) {
-            setEvaluationEnabled(evt.evaluation_enabled);
-          }
           if (!finalEvaluationEnabled) {
             finalConfidence = 0;
             finalMetrics = ZERO_METRICS;
@@ -305,7 +307,7 @@ const ChatApp: React.FC = () => {
             return next;
           });
         }
-      }, controller.signal);
+      }, controller.signal, requestEvaluation);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
@@ -446,6 +448,27 @@ const ChatApp: React.FC = () => {
                 </div>
 
                 <div className="sidebar-section">
+                  <h2>Response Settings</h2>
+                  <label className={`eval-toggle ${!evaluationAvailable ? 'disabled' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={userEvaluationEnabled}
+                      disabled={!evaluationAvailable || isLoading}
+                      onChange={(e) => handleEvaluationToggle(e.target.checked)}
+                    />
+                    <span className="eval-toggle-slider" />
+                    <span className="eval-toggle-label">Ragas evaluation</span>
+                  </label>
+                  <p className="eval-toggle-hint">
+                    {!evaluationAvailable
+                      ? 'Disabled by server admin.'
+                      : userEvaluationEnabled
+                        ? 'Trust scores on — responses will be slower.'
+                        : 'Trust scores off — faster responses (0%).'}
+                  </p>
+                </div>
+
+                <div className="sidebar-section">
                   <h2>Document Management</h2>
                   <div
                     className="upload-area"
@@ -540,9 +563,25 @@ const ChatApp: React.FC = () => {
                   <ShieldCheck size={12} />
                   RAG Active
                 </div>
-                <div className={`chat-header-badge ${evaluationEnabled ? 'eval-on' : 'eval-off'}`}>
-                  {evaluationEnabled ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
-                  {evaluationEnabled ? 'Evaluation On' : 'Evaluation Off'}
+                <div className={`chat-header-badge ${
+                  !evaluationAvailable
+                    ? 'eval-unavailable'
+                    : userEvaluationEnabled
+                      ? 'eval-on'
+                      : 'eval-off'
+                }`}>
+                  {!evaluationAvailable ? (
+                    <ShieldOff size={12} />
+                  ) : userEvaluationEnabled ? (
+                    <ShieldCheck size={12} />
+                  ) : (
+                    <ShieldOff size={12} />
+                  )}
+                  {!evaluationAvailable
+                    ? 'Eval Unavailable'
+                    : userEvaluationEnabled
+                      ? 'Evaluation On'
+                      : 'Evaluation Off'}
                 </div>
               </div>
             </div>
@@ -629,10 +668,10 @@ const ChatApp: React.FC = () => {
                     {msg.role === 'assistant' && msg.confidence !== undefined && (
                       <div className="trust-indicator-container">
                         {(() => {
-                          const evalOn = isMessageEvalOn(msg, evaluationEnabled);
-                          const trustPct = getDisplayConfidence(msg, evaluationEnabled);
-                          const faithPct = getDisplayMetric(msg, 'faithfulness', evaluationEnabled);
-                          const relPct = getDisplayMetric(msg, 'relevance', evaluationEnabled);
+                          const evalOn = isMessageEvalOn(msg);
+                          const trustPct = getDisplayConfidence(msg);
+                          const faithPct = getDisplayMetric(msg, 'faithfulness');
+                          const relPct = getDisplayMetric(msg, 'relevance');
                           return (
                             <>
                         <div className={`trust-score-badge ${evalOn ? getTrustClass(msg.confidence || 0) : 'eval-off'}`}>

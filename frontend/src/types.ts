@@ -32,6 +32,7 @@ export interface Conversation {
 export interface QueryRequest {
   question: string;
   chat_history?: { role: string; content: string }[];
+  enable_evaluation?: boolean;
 }
 
 export interface QueryResponse {

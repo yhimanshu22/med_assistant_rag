@@ -25,6 +25,7 @@ class AuthResponse(BaseModel):
 class QueryRequest(BaseModel):
     question: str
     chat_history: Optional[List[Dict[str, str]]] = []
+    enable_evaluation: bool = False
 
 class DocumentSource(BaseModel):
     page_content: str

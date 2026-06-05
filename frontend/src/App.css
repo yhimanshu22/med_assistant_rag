@@ -416,10 +416,84 @@
   border: 1px solid #a7f3d0;
 }
 
-.chat-header-badge.eval-off {
+.chat-header-badge.eval-off,
+.chat-header-badge.eval-unavailable {
   color: #64748b;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
+}
+
+.eval-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fafbfc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.eval-toggle.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.eval-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.eval-toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #cbd5e1;
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.eval-toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.eval-toggle input:checked + .eval-toggle-slider {
+  background: var(--primary);
+}
+
+.eval-toggle input:checked + .eval-toggle-slider::after {
+  transform: translateX(16px);
+}
+
+.eval-toggle input:disabled + .eval-toggle-slider {
+  opacity: 0.5;
+}
+
+.eval-toggle-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.eval-toggle-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 0.5rem;
+  padding: 0 0.25rem;
 }
 
 .chat-history {

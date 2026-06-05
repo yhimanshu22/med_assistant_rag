@@ -58,7 +58,7 @@ async def health_endpoint():
     ready = bool(rag_service.llm and rag_service.vectordb)
     return {
         "status": "ready" if ready else "starting",
-        "evaluation_enabled": settings.ENABLE_RAG_EVALUATION,
+        "evaluation_available": settings.ENABLE_RAG_EVALUATION,
     }
 
 @app.post("/query", response_model=QueryResponse)
@@ -71,7 +71,11 @@ async def query_endpoint(request: QueryRequest, _: User = Depends(get_current_us
 
     start_time = time()
     try:
-        response = rag_service.answer_question(request.question, request.chat_history)
+        response = rag_service.answer_question(
+            request.question,
+            request.chat_history,
+            enable_evaluation=request.enable_evaluation,
+        )
         
         answer_text = response.get('answer', "No answer generated.")
         source_docs = []
@@ -111,7 +115,11 @@ async def query_stream_endpoint(request: QueryRequest, _: User = Depends(get_cur
 
         def run_stream() -> List[str]:
             lines: List[str] = []
-            for item in rag_service.answer_question_stream(request.question, request.chat_history):
+            for item in rag_service.answer_question_stream(
+                request.question,
+                request.chat_history,
+                enable_evaluation=request.enable_evaluation,
+            ):
                 lines.append(json.dumps(item))
             return lines
 

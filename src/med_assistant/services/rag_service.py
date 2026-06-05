@@ -76,7 +76,8 @@ class RAGService:
     def __init__(self):
         self.llm = None
         self.vectordb = None
-        self.evaluator = None # Initialize evaluator attribute
+        self.evaluator = None
+        self._embeddings = None
         self._bm25: Optional[BM25Okapi] = None
         self._bm25_docs: List[Document] = []
         self._reranker: Optional[CrossEncoder] = None
@@ -107,11 +108,12 @@ class RAGService:
             cache_folder=settings.MODEL_CACHE_DIR
         )
 
+        self._embeddings = embeddings
+        self.evaluator = None
         if settings.ENABLE_RAG_EVALUATION:
-            self.evaluator = EvaluatorService(self.llm, embeddings)
+            print("Ragas evaluation available — users can enable it per query in the UI.")
         else:
-            self.evaluator = None
-            print("Ragas evaluation disabled (faster responses). Set ENABLE_RAG_EVALUATION=true to enable.")
+            print("Ragas evaluation disabled on server (ENABLE_RAG_EVALUATION=false).")
 
         # 3. Load VectorDB
         print(f"Loading ChromaDB from {settings.DB_DIR}...")
@@ -188,25 +190,42 @@ Detailed Evidence-Based Answer:"""
             self._bm25_docs = []
             self._bm25 = None
 
-    @property
-    def evaluation_enabled(self) -> bool:
-        return bool(settings.ENABLE_RAG_EVALUATION and self.evaluator)
+    def _should_evaluate(self, enable_evaluation: bool) -> bool:
+        return bool(settings.ENABLE_RAG_EVALUATION and enable_evaluation)
+
+    def _ensure_evaluator(self) -> Optional[EvaluatorService]:
+        if not settings.ENABLE_RAG_EVALUATION or not self._embeddings:
+            return None
+        if self.evaluator is None:
+            print("Loading Ragas evaluator (first evaluation request)...")
+            self.evaluator = EvaluatorService(self.llm, self._embeddings)
+        return self.evaluator
 
     def _default_eval_scores(self) -> Dict[str, float]:
         return {"faithfulness": 0.0, "relevance": 0.0, "confidence_score": 0.0}
 
-    def _evaluate_if_enabled(self, question: str, context: str, answer: str) -> Dict[str, float]:
-        if not self.evaluation_enabled:
+    def _evaluate_if_enabled(
+        self,
+        question: str,
+        context: str,
+        answer: str,
+        enable_evaluation: bool,
+    ) -> Dict[str, float]:
+        if not self._should_evaluate(enable_evaluation):
             return self._default_eval_scores()
-        return self.evaluator.evaluate_response(question, context, answer)
+        evaluator = self._ensure_evaluator()
+        if not evaluator:
+            return self._default_eval_scores()
+        return evaluator.evaluate_response(question, context, answer)
 
     def _build_result(
         self,
         answer: str,
         sources: List[Dict[str, Any]],
         eval_results: Dict[str, float],
+        enable_evaluation: bool,
     ) -> Dict[str, Any]:
-        enabled = self.evaluation_enabled
+        enabled = self._should_evaluate(enable_evaluation)
         if not enabled:
             eval_results = self._default_eval_scores()
         return {
@@ -220,19 +239,25 @@ Detailed Evidence-Based Answer:"""
             "evaluation_enabled": enabled,
         }
 
-    def _normalize_cached_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Re-apply current evaluation settings to in-memory cached answers."""
-        if self.evaluation_enabled:
+    def _normalize_cached_result(
+        self,
+        result: Dict[str, Any],
+        enable_evaluation: bool,
+    ) -> Dict[str, Any]:
+        """Re-apply per-request evaluation preference to in-memory cached answers."""
+        if result.get("evaluation_enabled") == self._should_evaluate(enable_evaluation):
             return result
         normalized = dict(result)
-        normalized["evaluation_enabled"] = False
-        normalized["confidence"] = 0.0
-        normalized["metrics"] = {"faithfulness": 0.0, "relevance": 0.0}
+        enabled = self._should_evaluate(enable_evaluation)
+        normalized["evaluation_enabled"] = enabled
+        if not enabled:
+            normalized["confidence"] = 0.0
+            normalized["metrics"] = {"faithfulness": 0.0, "relevance": 0.0}
         return normalized
 
-    def _conversational_answer(self, question: str) -> Dict[str, Any]:
+    def _conversational_answer(self, question: str, enable_evaluation: bool) -> Dict[str, Any]:
         answer = conversational_reply(question)
-        return self._build_result(answer, [], self._default_eval_scores())
+        return self._build_result(answer, [], self._default_eval_scores(), enable_evaluation)
 
     def _rewrite_question(self, question: str, chat_history: Optional[list]) -> str:
         if not chat_history:
@@ -323,24 +348,29 @@ Detailed Evidence-Based Answer:"""
         ranked = sorted(zip(docs, scores), key=lambda x: float(x[1]), reverse=True)
         return [(d, float(s)) for d, s in ranked[:top_n]]
 
-    def answer_question(self, question: str, chat_history: list = None):
+    def answer_question(
+        self,
+        question: str,
+        chat_history: list = None,
+        enable_evaluation: bool = False,
+    ):
         if not self.vectordb or not self.llm:
             raise RuntimeError("RAG Service is not initialized.")
 
         if is_conversational_query(question):
-            cache_key = f"conv::{question.strip().lower()}"
+            cache_key = f"conv::{question.strip().lower()}::eval={int(enable_evaluation)}"
             cached = self._answer_cache.get(cache_key)
             if cached:
-                return self._normalize_cached_result(cached)
-            result = self._conversational_answer(question)
+                return self._normalize_cached_result(cached, enable_evaluation)
+            result = self._conversational_answer(question, enable_evaluation)
             self._answer_cache[cache_key] = result
             return result
 
         standalone_q = self._rewrite_question(question, chat_history)
-        cache_key = f"q::{standalone_q}"
+        cache_key = f"q::{standalone_q}::eval={int(enable_evaluation)}"
         cached = self._answer_cache.get(cache_key)
         if cached:
-            return self._normalize_cached_result(cached)
+            return self._normalize_cached_result(cached, enable_evaluation)
 
         # Retrieval cache (docs only; avoids repeated DB lookups on same query)
         r_cached = self._retrieval_cache.get(cache_key)
@@ -376,9 +406,12 @@ Detailed Evidence-Based Answer:"""
             )
             sources = [{"page_content": d.page_content, "metadata": d.metadata} for d in source_docs]
             eval_results = self._evaluate_if_enabled(
-                question, "\n".join([d.page_content for d in source_docs])[:6000], answer
+                question,
+                "\n".join([d.page_content for d in source_docs])[:6000],
+                answer,
+                enable_evaluation,
             )
-            return self._build_result(answer, sources, eval_results)
+            return self._build_result(answer, sources, eval_results, enable_evaluation)
 
         context = "\n\n".join(
             [
@@ -397,6 +430,7 @@ Detailed Evidence-Based Answer:"""
                 f"I encountered an error while processing your request: {str(e)}",
                 [],
                 self._default_eval_scores(),
+                enable_evaluation,
             )
 
         # Format sources
@@ -408,8 +442,10 @@ Detailed Evidence-Based Answer:"""
         if len(context_str) > 6000:
             context_str = context_str[:6000] + "... [context truncated]"
             
-        eval_results = self._evaluate_if_enabled(question, context_str, answer)
-        result = self._build_result(answer, sources, eval_results)
+        eval_results = self._evaluate_if_enabled(
+            question, context_str, answer, enable_evaluation
+        )
+        result = self._build_result(answer, sources, eval_results, enable_evaluation)
 
         self._answer_cache[cache_key] = result
         if len(self._answer_cache) > self._cache_max_entries:
@@ -417,18 +453,24 @@ Detailed Evidence-Based Answer:"""
 
         return result
 
-    def answer_question_stream(self, question: str, chat_history: list = None, chunk_size: int = 48) -> Iterable[Dict[str, Any]]:
+    def answer_question_stream(
+        self,
+        question: str,
+        chat_history: list = None,
+        enable_evaluation: bool = False,
+        chunk_size: int = 48,
+    ) -> Iterable[Dict[str, Any]]:
         """
         Streams an answer end-to-end. This is a lightweight stream that yields partial text chunks
         (useful for UX) plus a final summary payload.
         """
         start = time()
-        result = self.answer_question(question, chat_history)
+        result = self.answer_question(question, chat_history, enable_evaluation)
         answer = result.get("answer", "")
         sources = result.get("sources", [])
         confidence = result.get("confidence", 0.0)
         metrics = result.get("metrics", {})
-        evaluation_enabled = result.get("evaluation_enabled", self.evaluation_enabled)
+        evaluation_enabled = result.get("evaluation_enabled", False)
 
         yield {
             "type": "meta",
