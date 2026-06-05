@@ -37,6 +37,18 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './App.css';
 
+const WELCOME_PROMPTS = [
+  'What is aplastic anemia?',
+  'What are the symptoms of Influenza?',
+  'Explain panhypoplasia of the marrow',
+];
+
+const getTrustClass = (score: number) => {
+  if (score > 0.8) return 'high';
+  if (score > 0.5) return 'mid';
+  return 'low';
+};
+
 const ChatApp: React.FC = () => {
   const { email, logout } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -271,12 +283,13 @@ const ChatApp: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-            {/* Sidebar */}
             <aside className="sidebar">
               <div className="sidebar-header">
-                <Stethoscope size={32} color="var(--primary)" strokeWidth={2.5} />
+                <div className="sidebar-logo-icon">
+                  <Stethoscope size={20} strokeWidth={2.5} />
+                </div>
                 <div>
-                  <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist</h1>
+                  <h1 onClick={() => navigate('/')}>MedAssist</h1>
                   {email && <p className="user-email">{email}</p>}
                 </div>
               </div>
@@ -300,9 +313,7 @@ const ChatApp: React.FC = () => {
                     </div>
                   ))}
                   {conversations.length === 0 && (
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                      No recent chats
-                    </p>
+                    <p className="empty-history">No recent chats</p>
                   )}
                 </div>
               </div>
@@ -314,13 +325,11 @@ const ChatApp: React.FC = () => {
                 onClick={() => fileInputRef.current?.click()}
               >
                 {isIngesting ? (
-                  <Loader2 className="animate-spin" size={24} color="var(--primary)" style={{ margin: '0 auto 0.5rem' }} />
+                  <Loader2 className="animate-spin" size={22} color="var(--primary)" />
                 ) : (
-                  <Upload size={24} color="var(--primary)" style={{ margin: '0 auto 0.5rem' }} />
+                  <Upload size={22} color="var(--primary)" />
                 )}
-                <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                  {isIngesting ? 'Ingesting...' : 'Upload Medical PDF'}
-                </p>
+                <p>{isIngesting ? 'Ingesting...' : 'Upload Medical PDF'}</p>
                 <input 
                   type="file" 
                   ref={fileInputRef} 
@@ -378,98 +387,84 @@ const ChatApp: React.FC = () => {
               )}
             </div>
 
-            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <button
-                onClick={handleLogout}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  padding: '0.75rem',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  fontWeight: 500
-                }}
-              >
-                <LogOut size={18} />
+            <div className="sidebar-footer">
+              <button className="sidebar-footer-btn" onClick={handleLogout}>
+                <LogOut size={16} />
                 Logout
               </button>
-              <button 
-                className="btn-clear" 
-                onClick={clearChat}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  padding: '0.75rem',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
-                  color: '#dc2626',
-                  fontWeight: 500
-                }}
-              >
-                <Trash2 size={18} />
+              <button className="sidebar-footer-btn danger" onClick={clearChat}>
+                <Trash2 size={16} />
                 Clear Chat
               </button>
             </div>
           </aside>
 
-          {/* Main Content */}
           <main className="main-content">
+            <div className="chat-header">
+              <div>
+                <div className="chat-header-title">
+                  {activeConversation?.title || 'New Conversation'}
+                </div>
+                <div className="chat-header-sub">Evidence-based answers from your documents</div>
+              </div>
+              <div className="chat-header-badge">
+                <ShieldCheck size={12} />
+                RAG Active
+              </div>
+            </div>
+
             <div className="chat-history">
+              <div className="chat-messages">
               {messages.length === 0 ? (
                 <div className="welcome-screen">
-                  <Stethoscope size={64} color="var(--border)" style={{ marginBottom: '1.5rem' }} />
-                  <h2 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>Medical Assistant</h2>
-                  <p>Ask a question about your medical documents to get started.</p>
+                  <div className="welcome-icon">
+                    <Stethoscope size={36} strokeWidth={2} />
+                  </div>
+                  <h2>How can I help you today?</h2>
+                  <p>Ask anything about your uploaded medical documents. Answers include citations and trust scores.</p>
+                  <div className="welcome-prompts">
+                    {WELCOME_PROMPTS.map((prompt) => (
+                      <button
+                        key={prompt}
+                        className="welcome-prompt-btn"
+                        onClick={() => setInput(prompt)}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 messages.map((msg, idx) => (
                   <div key={idx} className={`message ${msg.role}`}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                      {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {msg.role === 'user' ? 'You' : 'Assistant'}
+                    <div className="message-avatar">
+                      {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                    </div>
+                    <div className="message-body">
+                      <span className="message-label">
+                        {msg.role === 'user' ? 'You' : 'MedAssist'}
                       </span>
-                    </div>
-                    <div className="message-bubble">
-                      {msg.role === 'assistant' ? (
-                        <div className="markdown-content">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        msg.content
-                      )}
-                    </div>
-                    
+                      <div className="message-bubble">
+                        {msg.role === 'assistant' ? (
+                          <div className="markdown-content">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.content
+                        )}
+                      </div>
+
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="sources-container">
-                        <button 
+                        <button
+                          className={`sources-toggle ${expandedSources[idx] ? 'open' : ''}`}
                           onClick={() => toggleSources(idx)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '4px 0'
-                          }}
                         >
                           <FileText size={14} />
                           {expandedSources[idx] ? 'Hide Sources' : `View ${msg.sources.length} Sources`}
-                          <ChevronRight size={14} style={{ transform: expandedSources[idx] ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                          <ChevronRight size={14} />
                         </button>
                         
                         <AnimatePresence>
@@ -494,13 +489,9 @@ const ChatApp: React.FC = () => {
                     
                     {msg.confidence !== undefined && (
                       <div className="trust-indicator-container">
-                        <div className="trust-score-badge" style={{
-                          background: msg.confidence > 0.8 ? '#ecfdf5' : (msg.confidence > 0.5 ? '#fffbeb' : '#fef2f2'),
-                          color: msg.confidence > 0.8 ? '#065f46' : (msg.confidence > 0.5 ? '#92400e' : '#991b1b'),
-                          border: `1px solid ${msg.confidence > 0.8 ? '#10b981' : (msg.confidence > 0.5 ? '#f59e0b' : '#ef4444')}`
-                        }}>
-                          <ShieldCheck size={14} />
-                          <span className="trust-label">Trust Score: {Math.round(msg.confidence * 100)}%</span>
+                        <div className={`trust-score-badge ${getTrustClass(msg.confidence)}`}>
+                          <ShieldCheck size={13} />
+                          <span>Trust {Math.round(msg.confidence * 100)}%</span>
                           <div className="trust-tooltip">
                             <div className="tooltip-item">
                               <span>Faithfulness:</span>
@@ -531,40 +522,51 @@ const ChatApp: React.FC = () => {
                         </div>
                       </div>
                     )}
+                    </div>
                   </div>
                 ))
               )}
               {isLoading && (
                 <div className="message assistant">
-                  <div className="message-bubble" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Loader2 className="animate-spin" size={18} />
-                    Thinking...
+                  <div className="message-avatar">
+                    <Bot size={16} />
+                  </div>
+                  <div className="message-body">
+                    <span className="message-label">MedAssist</span>
+                    <div className="message-bubble thinking-bubble">
+                      <div className="thinking-dots">
+                        <span /><span /><span />
+                      </div>
+                      Analyzing documents...
+                    </div>
                   </div>
                 </div>
               )}
               <div ref={chatEndRef} />
+              </div>
             </div>
 
             <div className="input-area">
-              <form 
+              <form
                 onSubmit={(e) => { e.preventDefault(); handleSend(); }}
                 className="input-container"
               >
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="e.g., What are the symptoms of Influenza?"
+                  placeholder="Ask a question about your medical documents..."
                   disabled={isLoading}
                 />
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="send-button"
                   disabled={isLoading || !input.trim()}
                 >
-                  <Send size={18} />
+                  <Send size={17} />
                 </button>
               </form>
+              <p className="input-hint">Responses are grounded in your uploaded PDFs · Not a substitute for professional medical advice</p>
             </div>
           </main>
     </motion.div>
