@@ -25,7 +25,9 @@ import {
   ShieldCheck,
   CheckCircle2, 
   AlertCircle,
-  LogOut
+  LogOut,
+  Square,
+  ChevronDown
 } from 'lucide-react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
@@ -64,11 +66,11 @@ const ChatApp: React.FC = () => {
   const [expandedSources, setExpandedSources] = useState<Record<number, boolean>>({});
   
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatHistoryRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const prevActiveIdRef = useRef<string | null>(null);
+  const [showScrollDown, setShowScrollDown] = useState(false);
 
   const startNewChat = () => {
     const newId = Date.now().toString();
@@ -128,8 +130,19 @@ const ChatApp: React.FC = () => {
     }
   }, []);
 
+  const handleChatScroll = () => {
+    const el = chatHistoryRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollDown(distanceFromBottom > 120);
+  };
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    chatEndRef.current?.scrollIntoView({ behavior });
+    setShowScrollDown(false);
+  };
+
   useEffect(() => {
-    scrollToBottom();
     if (conversations.length > 0) {
       localStorage.setItem('medassist_conversations', JSON.stringify(conversations));
       if (activeConversationId) {
@@ -137,6 +150,23 @@ const ChatApp: React.FC = () => {
       }
     }
   }, [conversations, activeConversationId]);
+
+  useEffect(() => {
+    if (activeConversationId !== prevActiveIdRef.current) {
+      prevActiveIdRef.current = activeConversationId;
+      requestAnimationFrame(() => scrollToBottom('auto'));
+      return;
+    }
+
+    const el = chatHistoryRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom <= 120) {
+      scrollToBottom(isLoading ? 'auto' : 'smooth');
+    } else {
+      setShowScrollDown(true);
+    }
+  }, [conversations, activeConversationId, isLoading]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -148,8 +178,13 @@ const ChatApp: React.FC = () => {
     };
 
     updateActiveConversation(prev => [...prev, userMessage]);
+    const question = input;
     setInput('');
     setIsLoading(true);
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const chatHistory = messages.map(msg => ({
       role: msg.role,
@@ -169,7 +204,7 @@ const ChatApp: React.FC = () => {
       let finalMetrics: any | undefined;
       let finalTotalTime: string | undefined;
 
-      await queryMedicalAssistantStream(input, chatHistory, (evt) => {
+      await queryMedicalAssistantStream(question, chatHistory, (evt) => {
         if (evt.type === 'meta') {
           finalSources = evt.sources;
           finalConfidence = evt.confidence;
@@ -213,18 +248,49 @@ const ChatApp: React.FC = () => {
             return next;
           });
         }
-      });
+      }, controller.signal);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching response:', error);
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error while processing your request. Please ensure the backend server is running.',
-        timestamp: Date.now(),
-      };
-      updateActiveConversation(prev => [...prev, errorMessage]);
+      updateActiveConversation(prev => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === 'assistant' && !last.content?.trim()) {
+          last.content = 'Sorry, I encountered an error while processing your request. Please ensure the backend server is running.';
+          return next;
+        }
+        return [...prev, {
+          role: 'assistant',
+          content: 'Sorry, I encountered an error while processing your request. Please ensure the backend server is running.',
+          timestamp: Date.now(),
+        }];
+      });
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsLoading(false);
     }
+  };
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsLoading(false);
+    updateActiveConversation(prev => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.role === 'assistant') {
+        if (!last.content?.trim()) {
+          last.content = '*Response stopped.*';
+        } else if (!last.content.includes('Response stopped')) {
+          last.content += '\n\n---\n*Response stopped.*';
+        }
+      }
+      return next;
+    });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -279,125 +345,130 @@ const ChatApp: React.FC = () => {
     <motion.div
       key="chat"
       className="app-container"
+      style={{ height: '100%', minHeight: 0 }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
             <aside className="sidebar">
-              <div className="sidebar-header">
-                <div className="sidebar-logo-icon">
-                  <Stethoscope size={20} strokeWidth={2.5} />
+              <div className="sidebar-top">
+                <div className="sidebar-header">
+                  <div className="sidebar-logo-icon">
+                    <Stethoscope size={20} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <h1 onClick={() => navigate('/')}>MedAssist</h1>
+                    {email && <p className="user-email">{email}</p>}
+                  </div>
                 </div>
-                <div>
-                  <h1 onClick={() => navigate('/')}>MedAssist</h1>
-                  {email && <p className="user-email">{email}</p>}
-                </div>
+
+                <button className="btn-new-chat" onClick={startNewChat}>
+                  <Plus size={18} />
+                  New Conversation
+                </button>
               </div>
 
-              <button className="btn-new-chat" onClick={startNewChat}>
-                <Plus size={18} />
-                New Conversation
-              </button>
-
-              <div className="sidebar-section history-section">
-                <h2>Recent Conversations</h2>
-                <div className="conversation-list">
-                  {conversations.map(conv => (
-                    <div 
-                      key={conv.id} 
-                      className={`conversation-item ${conv.id === activeConversationId ? 'active' : ''}`}
-                      onClick={() => setActiveConversationId(conv.id)}
-                    >
-                      <MessageSquare size={16} />
-                      <span className="conversation-title">{conv.title}</span>
-                    </div>
-                  ))}
-                  {conversations.length === 0 && (
-                    <p className="empty-history">No recent chats</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="sidebar-section">
-                <h2>Document Management</h2>
-              <div 
-                className="upload-area"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {isIngesting ? (
-                  <Loader2 className="animate-spin" size={22} color="var(--primary)" />
-                ) : (
-                  <Upload size={22} color="var(--primary)" />
-                )}
-                <p>{isIngesting ? 'Ingesting...' : 'Upload Medical PDF'}</p>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileUpload} 
-                  accept=".pdf" 
-                  style={{ display: 'none' }}
-                  disabled={isIngesting}
-                />
-              </div>
-              
-              {ingestionLogs.length > 0 && (
-                <div className="ingestion-log">
-                  {ingestionLogs.map((log, i) => {
-                    const isLast = i === ingestionLogs.length - 1;
-                    let Icon = Search;
-                    if (log.step === 'processing') Icon = FileCheck;
-                    if (log.step === 'splitting') Icon = Layers;
-                    if (log.step === 'embedding') Icon = Cpu;
-                    if (log.step === 'ingesting') Icon = Database;
-                    if (log.step === 'complete') Icon = CheckCircle2;
-                    
-                    return (
-                      <div key={i} className={`ingestion-item ${isLast && isIngesting ? 'active' : ''}`}>
-                        <div className="ingestion-item-icon">
-                          {log.status === 'error' ? (
-                            <AlertCircle size={16} color="#ef4444" />
-                          ) : (log.status === 'warning' ? (
-                            <AlertCircle size={16} color="#f59e0b" />
-                          ) : (
-                            <Icon size={16} color={log.step === 'complete' ? '#10b981' : 'var(--primary)'} />
-                          ))}
-                        </div>
-                        <div className="ingestion-item-content">
-                          <div className="ingestion-item-message">
-                            {log.message}
-                            {log.step === 'complete' && log.total_time && (
-                              <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>
-                                ({log.total_time})
-                              </span>
-                            )}
-                          </div>
-                          {log.file && <div className="ingestion-item-file">{log.file}</div>}
-                        </div>
+              <div className="sidebar-body">
+                <div className="sidebar-section history-section">
+                  <h2>Recent Conversations</h2>
+                  <div className="conversation-list">
+                    {conversations.map(conv => (
+                      <div
+                        key={conv.id}
+                        className={`conversation-item ${conv.id === activeConversationId ? 'active' : ''}`}
+                        onClick={() => setActiveConversationId(conv.id)}
+                      >
+                        <MessageSquare size={16} />
+                        <span className="conversation-title">{conv.title}</span>
                       </div>
-                    );
-                  })}
-                  
-                  {!isIngesting && ingestionLogs.some(l => l.step === 'complete') && (
-                    <div className="ingestion-status">
-                      <span>Process complete</span>
-                      <CheckCircle2 size={14} color="#10b981" />
+                    ))}
+                    {conversations.length === 0 && (
+                      <p className="empty-history">No recent chats</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="sidebar-section">
+                  <h2>Document Management</h2>
+                  <div
+                    className="upload-area"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {isIngesting ? (
+                      <Loader2 className="animate-spin" size={22} color="var(--primary)" />
+                    ) : (
+                      <Upload size={22} color="var(--primary)" />
+                    )}
+                    <p>{isIngesting ? 'Ingesting...' : 'Upload Medical PDF'}</p>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept=".pdf"
+                      style={{ display: 'none' }}
+                      disabled={isIngesting}
+                    />
+                  </div>
+
+                  {ingestionLogs.length > 0 && (
+                    <div className="ingestion-log">
+                      {ingestionLogs.map((log, i) => {
+                        const isLast = i === ingestionLogs.length - 1;
+                        let Icon = Search;
+                        if (log.step === 'processing') Icon = FileCheck;
+                        if (log.step === 'splitting') Icon = Layers;
+                        if (log.step === 'embedding') Icon = Cpu;
+                        if (log.step === 'ingesting') Icon = Database;
+                        if (log.step === 'complete') Icon = CheckCircle2;
+
+                        return (
+                          <div key={i} className={`ingestion-item ${isLast && isIngesting ? 'active' : ''}`}>
+                            <div className="ingestion-item-icon">
+                              {log.status === 'error' ? (
+                                <AlertCircle size={16} color="#ef4444" />
+                              ) : (log.status === 'warning' ? (
+                                <AlertCircle size={16} color="#f59e0b" />
+                              ) : (
+                                <Icon size={16} color={log.step === 'complete' ? '#10b981' : 'var(--primary)'} />
+                              ))}
+                            </div>
+                            <div className="ingestion-item-content">
+                              <div className="ingestion-item-message">
+                                {log.message}
+                                {log.step === 'complete' && log.total_time && (
+                                  <span style={{ marginLeft: '8px', color: '#10b981', fontWeight: 600 }}>
+                                    ({log.total_time})
+                                  </span>
+                                )}
+                              </div>
+                              {log.file && <div className="ingestion-item-file">{log.file}</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {!isIngesting && ingestionLogs.some(l => l.step === 'complete') && (
+                        <div className="ingestion-status">
+                          <span>Process complete</span>
+                          <CheckCircle2 size={14} color="#10b981" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
 
-            <div className="sidebar-footer">
-              <button className="sidebar-footer-btn" onClick={handleLogout}>
-                <LogOut size={16} />
-                Logout
-              </button>
-              <button className="sidebar-footer-btn danger" onClick={clearChat}>
-                <Trash2 size={16} />
-                Clear Chat
-              </button>
-            </div>
-          </aside>
+              <div className="sidebar-footer">
+                <button className="sidebar-footer-btn" onClick={handleLogout}>
+                  <LogOut size={16} />
+                  Logout
+                </button>
+                <button className="sidebar-footer-btn danger" onClick={clearChat}>
+                  <Trash2 size={16} />
+                  Clear Chat
+                </button>
+              </div>
+            </aside>
 
           <main className="main-content">
             <div className="chat-header">
@@ -413,7 +484,12 @@ const ChatApp: React.FC = () => {
               </div>
             </div>
 
-            <div className="chat-history">
+            <div className="chat-pane">
+            <div
+              className="chat-history"
+              ref={chatHistoryRef}
+              onScroll={handleChatScroll}
+            >
               <div className="chat-messages">
               {messages.length === 0 ? (
                 <div className="welcome-screen">
@@ -526,7 +602,7 @@ const ChatApp: React.FC = () => {
                   </div>
                 ))
               )}
-              {isLoading && (
+              {isLoading && !messages[messages.length - 1]?.content && (
                 <div className="message assistant">
                   <div className="message-avatar">
                     <Bot size={16} />
@@ -544,6 +620,19 @@ const ChatApp: React.FC = () => {
               )}
               <div ref={chatEndRef} />
               </div>
+
+            </div>
+
+              {showScrollDown && (
+                <button
+                  type="button"
+                  className="scroll-down-btn"
+                  onClick={() => scrollToBottom()}
+                  title="Scroll to latest message"
+                >
+                  <ChevronDown size={18} />
+                </button>
+              )}
             </div>
 
             <div className="input-area">
@@ -558,13 +647,24 @@ const ChatApp: React.FC = () => {
                   placeholder="Ask a question about your medical documents..."
                   disabled={isLoading}
                 />
-                <button
-                  type="submit"
-                  className="send-button"
-                  disabled={isLoading || !input.trim()}
-                >
-                  <Send size={17} />
-                </button>
+                {isLoading ? (
+                  <button
+                    type="button"
+                    className="stop-button"
+                    onClick={handleStop}
+                    title="Stop generating"
+                  >
+                    <Square size={15} fill="currentColor" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="send-button"
+                    disabled={!input.trim()}
+                  >
+                    <Send size={17} />
+                  </button>
+                )}
               </form>
               <p className="input-hint">Responses are grounded in your uploaded PDFs · Not a substitute for professional medical advice</p>
             </div>
@@ -597,7 +697,7 @@ const App: React.FC = () => {
         <Route path="/signup" element={<div className="route-shell"><SignupPage /></div>} />
 
         <Route path="/chat" element={
-          <div className="route-shell">
+          <div className="route-shell route-shell--fill">
             <ProtectedRoute>
               <ChatApp />
             </ProtectedRoute>

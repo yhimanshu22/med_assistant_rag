@@ -97,12 +97,14 @@ export const queryMedicalAssistant = async (question: string, chat_history?: { r
 export const queryMedicalAssistantStream = async (
   question: string,
   chat_history: { role: string; content: string }[] | undefined,
-  onEvent: (evt: { type: string; text?: string; sources?: any; confidence?: number; metrics?: any; total_time?: string; message?: string }) => void
+  onEvent: (evt: { type: string; text?: string; sources?: any; confidence?: number; metrics?: any; total_time?: string; message?: string }) => void,
+  signal?: AbortSignal,
 ): Promise<void> => {
   const response = await fetch(`${API_BASE_URL}/query/stream`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ question, chat_history }),
+    signal,
   });
 
   if (!response.ok) {
@@ -116,6 +118,10 @@ export const queryMedicalAssistantStream = async (
   let buffer = '';
 
   while (true) {
+    if (signal?.aborted) {
+      await reader.cancel();
+      break;
+    }
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
