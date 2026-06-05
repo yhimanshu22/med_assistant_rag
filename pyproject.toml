@@ -27,6 +27,10 @@ dependencies = [
     "ragas>=0.4.3",
     "datasets>=4.8.4",
     "rank-bm25>=0.2.2",
+    "sqlalchemy>=2.0.0",
+    "bcrypt>=4.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "email-validator>=2.0.0",
 ]
 
 [project.optional-dependencies]

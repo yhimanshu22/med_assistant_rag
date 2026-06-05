@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Stethoscope, 
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import './LandingPage.css';
 import heroImage from '../assets/hero.png';
+import demoPreview from '../assets/demo-preview.png';
 
 interface LandingPageProps {
   onStart: () => void;
@@ -27,7 +29,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             <Stethoscope size={28} className="logo-icon" />
             <span>MedAssist RAG</span>
           </div>
-          <button className="nav-btn" onClick={onStart}>Launch App</button>
+          <div className="nav-actions">
+            <Link to="/login" className="nav-link">Login</Link>
+            <Link to="/signup" className="nav-link nav-link-primary">Sign up</Link>
+            <button className="nav-btn" onClick={onStart}>Launch App</button>
+          </div>
         </div>
       </nav>
 
@@ -101,6 +107,50 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
           </motion.div>
         </div>
       </header>
+
+      {/* App Preview Section */}
+      <section className="demo-section">
+        <div className="demo-container">
+          <div className="demo-header">
+            <h2>See MedAssist in Action</h2>
+            <p>
+              Ask clinical questions and get evidence-based answers grounded in your
+              uploaded medical documents — with citations and trust scores.
+            </p>
+          </div>
+
+          <motion.div
+            className="demo-browser"
+            initial={{ opacity: 0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.7 }}
+          >
+            <div className="demo-browser-bar">
+              <span className="demo-dot red" />
+              <span className="demo-dot yellow" />
+              <span className="demo-dot green" />
+              <span className="demo-url">localhost:5173/chat</span>
+            </div>
+            <button className="demo-screenshot-btn" onClick={onStart} aria-label="Open MedAssist chat">
+              <img src={demoPreview} alt="MedAssist chat answering a question about aplastic anemia" className="demo-screenshot" />
+            </button>
+          </motion.div>
+
+          <div className="demo-prompts">
+            <span className="demo-prompts-label">Try asking:</span>
+            {[
+              'What is aplastic anemia?',
+              'What are the symptoms of Influenza?',
+              'List rare blood disorders',
+            ].map((prompt) => (
+              <button key={prompt} className="demo-prompt-chip" onClick={onStart}>
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Features Section */}
       <section className="features-section">

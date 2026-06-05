@@ -38,13 +38,6 @@ class EvaluatorService:
                 metric.embeddings = self.embeddings
 
 
-def mydecorator(func):
-    def wrapper():
-        print("before ")
-        func()
-        print("after")
-    return wrapper    
-
     def evaluate_response(self, query: str, context: str, answer: str) -> Dict[str, float]:
         """
         Evaluate the faithfulness and relevance of the answer using Ragas.
@@ -100,7 +93,7 @@ def mydecorator(func):
             logger.error(f"Error during Ragas evaluation: {e}")
             # Fallback to defaults
             return {
-                "faithfulness": 0.8,
-                "relevance": 0.8,
-                "confidence_score": 0.8
+                "faithfulness": 0.2,
+                "relevance": 0.2,
+                "confidence_score": 0.2
             }

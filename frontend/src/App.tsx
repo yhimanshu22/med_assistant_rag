@@ -24,15 +24,21 @@ import {
   Timer,
   ShieldCheck,
   CheckCircle2, 
-  AlertCircle
+  AlertCircle,
+  LogOut
 } from 'lucide-react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+import SignupPage from './components/SignupPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './context/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './App.css';
 
-const App: React.FC = () => {
+const ChatApp: React.FC = () => {
+  const { email, logout } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   
@@ -252,34 +258,27 @@ const App: React.FC = () => {
 
   const navigate = useNavigate();
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   return (
-    <AnimatePresence mode="wait">
-      <Routes>
-        <Route path="/" element={
-          <motion.div
-            key="landing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <LandingPage onStart={() => navigate('/chat')} />
-          </motion.div>
-        } />
-        
-        <Route path="/chat" element={
-          <motion.div
-            key="chat"
-            className="app-container"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-          >
+    <motion.div
+      key="chat"
+      className="app-container"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
             {/* Sidebar */}
             <aside className="sidebar">
               <div className="sidebar-header">
                 <Stethoscope size={32} color="var(--primary)" strokeWidth={2.5} />
-                <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist</h1>
+                <div>
+                  <h1 onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>MedAssist</h1>
+                  {email && <p className="user-email">{email}</p>}
+                </div>
               </div>
 
               <button className="btn-new-chat" onClick={startNewChat}>
@@ -379,7 +378,26 @@ const App: React.FC = () => {
               )}
             </div>
 
-            <div style={{ marginTop: 'auto' }}>
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button
+                onClick={handleLogout}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  fontWeight: 500
+                }}
+              >
+                <LogOut size={18} />
+                Logout
+              </button>
               <button 
                 className="btn-clear" 
                 onClick={clearChat}
@@ -549,10 +567,39 @@ const App: React.FC = () => {
               </form>
             </div>
           </main>
-        </motion.div>
-      } />
-    </Routes>
-  </AnimatePresence>
+    </motion.div>
+  );
+};
+
+const App: React.FC = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes>
+        <Route path="/" element={
+          <motion.div
+            key="landing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <LandingPage onStart={() => navigate(isAuthenticated ? '/chat' : '/login')} />
+          </motion.div>
+        } />
+
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+
+        <Route path="/chat" element={
+          <ProtectedRoute>
+            <ChatApp />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </AnimatePresence>
   );
 };
 

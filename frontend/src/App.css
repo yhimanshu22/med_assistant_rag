@@ -29,6 +29,13 @@
   color: var(--primary);
 }
 
+.user-email {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  word-break: break-all;
+}
+
 .sidebar-section {
   margin-bottom: 2rem;
 }

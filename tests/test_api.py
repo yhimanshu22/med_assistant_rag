@@ -18,7 +18,7 @@ def test_query_endpoint_success(client, mock_rag_service):
     assert source["metadata"]["source"] == "mock_file.pdf"
     
     # Ensure our mock was called with the correct question
-    mock_rag_service.assert_called_once_with("What is Influenza?")
+    mock_rag_service.assert_called_once_with("What is Influenza?", [])
 
 def test_query_endpoint_missing_question(client):
     """Test standard validation error for missing field."""
@@ -29,7 +29,8 @@ def test_query_endpoint_missing_question(client):
 
 def test_query_endpoint_uninitialized_service(client):
     """Test when RAG service is not initialized."""
-    with patch('med_assistant.api.main.rag_service.qa_chain', None):
+    with patch('med_assistant.api.main.rag_service.llm', None), \
+         patch('med_assistant.api.main.rag_service.vectordb', None):
         payload = {"question": "What happens if not initialized?"}
         response = client.post("/query", json=payload)
         

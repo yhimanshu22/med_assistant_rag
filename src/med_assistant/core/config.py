@@ -1,6 +1,8 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
     DATA_DIR: str = "data"
     DB_DIR: str = "chroma_db"
     MODEL_CACHE_DIR: str = "models_cache"
@@ -19,9 +21,11 @@ class Settings(BaseSettings):
     RETRIEVAL_MAX_DISTANCE: float = 0.9
     # Cross-encoder reranker model for relevance reranking
     RERANKER_MODEL_ID: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    
-    class Config:
 
-        env_file = ".env"
+    # Auth
+    DATABASE_URL: str = "sqlite:///./users.db"
+    SECRET_KEY: str = "change-me-in-production-use-a-long-random-secret"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
 settings = Settings()

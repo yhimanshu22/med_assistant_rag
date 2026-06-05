@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import os
@@ -16,7 +16,11 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+from med_assistant.api.auth import router as auth_router
+from med_assistant.api.deps import get_current_user
+from med_assistant.db.database import init_db
 from med_assistant.models.schemas import QueryRequest, QueryResponse, DocumentSource
+from med_assistant.models.user import User
 from med_assistant.services.rag_service import RAGService
 from med_assistant.services.ingestion_service import ingest_documents_generator
 
@@ -27,6 +31,7 @@ _ingest_jobs: Dict[str, Dict[str, Any]] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     # Load model and chain on startup
     try:
         rag_service.initialize()
@@ -36,6 +41,7 @@ async def lifespan(app: FastAPI):
     # Clean up if needed
 
 app = FastAPI(title="Medical Assistant RAG API", lifespan=lifespan)
+app.include_router(auth_router)
 
 # Add CORS middleware
 app.add_middleware(
@@ -46,8 +52,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_endpoint():
+    ready = bool(rag_service.llm and rag_service.vectordb)
+    return {"status": "ready" if ready else "starting"}
+
 @app.post("/query", response_model=QueryResponse)
-async def query_endpoint(request: QueryRequest):
+async def query_endpoint(request: QueryRequest, _: User = Depends(get_current_user)):
     """
     Endpoint to query the RAG medical assistant.
     """
@@ -83,7 +94,7 @@ async def query_endpoint(request: QueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/query/stream")
-async def query_stream_endpoint(request: QueryRequest):
+async def query_stream_endpoint(request: QueryRequest, _: User = Depends(get_current_user)):
     """
     Streams answer chunks as newline-delimited JSON (NDJSON).
     """
@@ -109,7 +120,7 @@ async def query_stream_endpoint(request: QueryRequest):
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 @app.post("/ingest")
-async def ingest_endpoint():
+async def ingest_endpoint(_: User = Depends(get_current_user)):
     """
     Endpoint to trigger document ingestion and stream progress.
     """
@@ -131,7 +142,7 @@ async def ingest_endpoint():
     return StreamingResponse(generate(), media_type="text/plain")
 
 @app.post("/ingest/async")
-async def ingest_async_endpoint():
+async def ingest_async_endpoint(_: User = Depends(get_current_user)):
     """
     Starts ingestion in the background and returns a job id.
     Client can poll `/ingest/{job_id}` for status + logs.
@@ -160,14 +171,14 @@ async def ingest_async_endpoint():
     return {"job_id": job_id, "status": "running"}
 
 @app.get("/ingest/{job_id}")
-async def ingest_status_endpoint(job_id: str):
+async def ingest_status_endpoint(job_id: str, _: User = Depends(get_current_user)):
     job = _ingest_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 @app.post("/upload")
-async def upload_endpoint(file: UploadFile = File(...)):
+async def upload_endpoint(file: UploadFile = File(...), _: User = Depends(get_current_user)):
     """
     Endpoint to upload a medical PDF document.
     """

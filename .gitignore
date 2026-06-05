@@ -17,6 +17,7 @@ venv.bak/
 data/
 chroma_db/
 models_cache/
+users.db
 
 # Testing
 .pytest_cache/

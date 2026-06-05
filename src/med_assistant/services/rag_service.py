@@ -23,6 +23,7 @@ class RAGService:
         self._bm25: Optional[BM25Okapi] = None
         self._bm25_docs: List[Document] = []
         self._reranker: Optional[CrossEncoder] = None
+        self._reranker_load_attempted: bool = False
 
         # Simple in-memory caches (process-local)
         self._answer_cache: Dict[str, Dict[str, Any]] = {}
@@ -83,14 +84,27 @@ Detailed Evidence-Based Answer:"""
         # Build BM25 index from persisted Chroma documents (keyword/hybrid retrieval)
         self._build_bm25_index()
 
-        # Load cross-encoder reranker
+        print("RAG Service initialized.")
+
+    def _get_reranker(self) -> Optional[CrossEncoder]:
+        """Load the cross-encoder lazily so startup is not blocked."""
+        if self._reranker is not None:
+            return self._reranker
+        if self._reranker_load_attempted:
+            return None
+        self._reranker_load_attempted = True
+
+        if not torch.cuda.is_available():
+            print("Skipping reranker on CPU (hybrid retrieval still active).")
+            return None
+
         try:
+            print(f"Loading reranker {settings.RERANKER_MODEL_ID}...")
             self._reranker = CrossEncoder(settings.RERANKER_MODEL_ID)
         except Exception as e:
             print(f"Warning: failed to load reranker {settings.RERANKER_MODEL_ID}: {e}")
             self._reranker = None
-
-        print("RAG Service initialized.")
+        return self._reranker
 
     def _tokenize_for_bm25(self, text: str) -> List[str]:
         return re.findall(r"[a-zA-Z0-9]+", text.lower())
@@ -195,10 +209,11 @@ Detailed Evidence-Based Answer:"""
     def _rerank(self, query: str, docs: List[Document], top_n: int) -> List[Tuple[Document, float]]:
         if not docs:
             return []
-        if not self._reranker:
+        reranker = self._get_reranker()
+        if not reranker:
             return [(d, 0.0) for d in docs[:top_n]]
         pairs = [(query, d.page_content) for d in docs]
-        scores = self._reranker.predict(pairs)
+        scores = reranker.predict(pairs)
         ranked = sorted(zip(docs, scores), key=lambda x: float(x[1]), reverse=True)
         return [(d, float(s)) for d, s in ranked[:top_n]]
 
