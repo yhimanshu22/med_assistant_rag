@@ -581,6 +581,7 @@ const App: React.FC = () => {
         <Route path="/" element={
           <motion.div
             key="landing"
+            className="route-shell"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -590,13 +591,15 @@ const App: React.FC = () => {
           </motion.div>
         } />
 
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/login" element={<div className="route-shell"><LoginPage /></div>} />
+        <Route path="/signup" element={<div className="route-shell"><SignupPage /></div>} />
 
         <Route path="/chat" element={
-          <ProtectedRoute>
-            <ChatApp />
-          </ProtectedRoute>
+          <div className="route-shell">
+            <ProtectedRoute>
+              <ChatApp />
+            </ProtectedRoute>
+          </div>
         } />
       </Routes>
     </AnimatePresence>

@@ -1,150 +1,193 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { 
-  Stethoscope, 
-  ShieldCheck, 
-  Zap, 
-  Globe, 
+import {
+  Stethoscope,
+  ShieldCheck,
   ArrowRight,
   Database,
-  Cpu,
-  Layers
+  FileText,
+  Search,
+  Upload,
+  Bot,
+  User,
+  Sparkles,
 } from 'lucide-react';
 import './LandingPage.css';
-import heroImage from '../assets/hero.png';
 import demoPreview from '../assets/demo-preview.png';
 
 interface LandingPageProps {
   onStart: () => void;
 }
 
+const FEATURES = [
+  {
+    icon: Database,
+    title: 'Local vector store',
+    desc: 'Documents are indexed in ChromaDB on your machine. Your data never leaves your environment.',
+  },
+  {
+    icon: Search,
+    title: 'Hybrid retrieval',
+    desc: 'Dense embeddings plus BM25 keyword search surface the most relevant medical passages.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Trust scoring',
+    desc: 'Every answer is evaluated for faithfulness and relevance so you can gauge reliability.',
+  },
+  {
+    icon: Upload,
+    title: 'PDF ingestion',
+    desc: 'Upload medical PDFs, chunk them automatically, and query them in natural language.',
+  },
+];
+
+const STEPS = [
+  { num: '1', title: 'Upload PDFs', desc: 'Add clinical guidelines, drug manuals, or study documents.' },
+  { num: '2', title: 'Index & embed', desc: 'The system chunks and embeds your files into a searchable index.' },
+  { num: '3', title: 'Ask questions', desc: 'Chat with evidence-based answers backed by source citations.' },
+];
+
+const PROMPTS = [
+  'What is aplastic anemia?',
+  'What are the symptoms of Influenza?',
+  'List rare blood disorders',
+];
+
 const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
   return (
     <div className="landing-page">
-      {/* Navigation */}
       <nav className="landing-nav">
         <div className="nav-container">
           <div className="logo">
-            <Stethoscope size={28} className="logo-icon" />
-            <span>MedAssist RAG</span>
+            <Stethoscope size={26} strokeWidth={2.5} />
+            <span>MedAssist</span>
           </div>
           <div className="nav-actions">
             <Link to="/login" className="nav-link">Login</Link>
-            <Link to="/signup" className="nav-link nav-link-primary">Sign up</Link>
-            <button className="nav-btn" onClick={onStart}>Launch App</button>
+            <Link to="/signup" className="nav-link-primary">Sign up</Link>
+            <button className="nav-btn" onClick={onStart}>Open app</button>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <header className="hero-section">
-        <div className="hero-container">
-          <motion.div 
-            className="hero-content"
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
+      <header className="hero">
+        <div className="hero-inner">
+          <motion.div
+            className="hero-copy"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
           >
-            <div className="badge">Next-Generation Medical AI</div>
-            <h1>Your Medical Knowledge, <span className="gradient-text">Augmented.</span></h1>
+            <div className="hero-eyebrow">
+              <Sparkles size={14} />
+              Medical RAG assistant
+            </div>
+            <h1>
+              Query your medical documents with{' '}
+              <span className="hero-highlight">cited answers</span>
+            </h1>
             <p>
-              Harness the power of Retrieval-Augmented Generation to query your private medical 
-              documents with clinical precision and absolute privacy.
+              Upload PDFs, ask clinical questions, and get structured responses
+              grounded in your own documents — with sources and trust scores.
             </p>
-            <div className="hero-actions">
-              <button className="primary-btn" onClick={onStart}>
-                Start Consulting <ArrowRight size={20} />
+            <div className="hero-cta">
+              <button className="btn-primary" onClick={onStart}>
+                Get started <ArrowRight size={18} />
               </button>
-              <button className="secondary-btn">Learn More</button>
+              <Link to="/signup" className="btn-ghost">Create free account</Link>
             </div>
-            
-            <div className="hero-stats">
-              <div className="stat">
-                <span className="stat-value">99.9%</span>
-                <span className="stat-label">Accuracy</span>
-              </div>
-              <div className="stat-separator"></div>
-              <div className="stat">
-                <span className="stat-value">Local</span>
-                <span className="stat-label">Privacy</span>
-              </div>
-              <div className="stat-separator"></div>
-              <div className="stat">
-                <span className="stat-value">Llama 3</span>
-                <span className="stat-label">Intelligence</span>
-              </div>
-            </div>
+            <ul className="hero-points">
+              <li><FileText size={15} /> PDF upload & indexing</li>
+              <li><Bot size={15} /> Streaming chat responses</li>
+              <li><ShieldCheck size={15} /> Faithfulness scoring</li>
+            </ul>
           </motion.div>
 
-          <motion.div 
-            className="hero-image-container"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, delay: 0.2 }}
+          <motion.div
+            className="hero-preview"
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.15 }}
           >
-            <div className="image-wrapper">
-              <img src={heroImage} alt="Medical AI" className="hero-img" />
-              <div className="glass-overlay"></div>
+            <div className="preview-window">
+              <div className="preview-chrome">
+                <span className="chrome-dot red" />
+                <span className="chrome-dot yellow" />
+                <span className="chrome-dot green" />
+                <span className="chrome-title">MedAssist</span>
+              </div>
+              <div className="preview-body">
+                <div className="preview-sidebar">
+                  <div className="preview-sidebar-title">Conversations</div>
+                  <div className="preview-conv active">What is aplastic anemia?</div>
+                  <div className="preview-conv">Influenza symptoms</div>
+                  <div className="preview-upload">
+                    <Upload size={14} />
+                    Upload PDF
+                  </div>
+                </div>
+                <div className="preview-chat">
+                  <div className="preview-msg user">
+                    <User size={12} />
+                    <span>What is aplastic anemia?</span>
+                  </div>
+                  <div className="preview-msg assistant">
+                    <Bot size={12} />
+                    <div className="preview-answer">
+                      <strong>Definition</strong>
+                      <p>Aplastic anemia is a condition characterized by panhypoplasia of the marrow...</p>
+                      <div className="preview-trust">
+                        <ShieldCheck size={12} />
+                        Trust score 87%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="preview-input">
+                    <span>Ask about your documents...</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            {/* Floating elements for visual interest */}
-            <motion.div 
-              className="floating-card c1"
-              animate={{ y: [0, -10, 0] }}
-              transition={{ repeat: Infinity, duration: 4 }}
-            >
-              <ShieldCheck size={20} color="#10b981" />
-              <span>HIPAA Compliant</span>
-            </motion.div>
-            <motion.div 
-              className="floating-card c2"
-              animate={{ y: [0, 15, 0] }}
-              transition={{ repeat: Infinity, duration: 5, delay: 0.5 }}
-            >
-              <Cpu size={20} color="#3b82f6" />
-              <span>4-Bit Quantization</span>
-            </motion.div>
           </motion.div>
         </div>
       </header>
 
-      {/* App Preview Section */}
       <section className="demo-section">
-        <div className="demo-container">
-          <div className="demo-header">
-            <h2>See MedAssist in Action</h2>
-            <p>
-              Ask clinical questions and get evidence-based answers grounded in your
-              uploaded medical documents — with citations and trust scores.
-            </p>
-          </div>
+        <div className="section-wrap">
+          <div className="section-label">Live preview</div>
+          <h2>Built for clinical Q&amp;A</h2>
+          <p className="section-desc">
+            Real interface — structured markdown answers, expandable sources, and response metrics.
+          </p>
 
           <motion.div
             className="demo-browser"
-            initial={{ opacity: 0, y: 40 }}
+            initial={{ opacity: 0, y: 32 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-80px' }}
-            transition={{ duration: 0.7 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
           >
             <div className="demo-browser-bar">
-              <span className="demo-dot red" />
-              <span className="demo-dot yellow" />
-              <span className="demo-dot green" />
-              <span className="demo-url">localhost:5173/chat</span>
+              <span className="chrome-dot red" />
+              <span className="chrome-dot yellow" />
+              <span className="chrome-dot green" />
+              <span className="chrome-url">medassist / chat</span>
             </div>
-            <button className="demo-screenshot-btn" onClick={onStart} aria-label="Open MedAssist chat">
-              <img src={demoPreview} alt="MedAssist chat answering a question about aplastic anemia" className="demo-screenshot" />
+            <button className="demo-screenshot-btn" onClick={onStart} aria-label="Open MedAssist">
+              <img
+                src={demoPreview}
+                alt="MedAssist answering a question about aplastic anemia"
+                className="demo-screenshot"
+              />
             </button>
           </motion.div>
 
           <div className="demo-prompts">
-            <span className="demo-prompts-label">Try asking:</span>
-            {[
-              'What is aplastic anemia?',
-              'What are the symptoms of Influenza?',
-              'List rare blood disorders',
-            ].map((prompt) => (
-              <button key={prompt} className="demo-prompt-chip" onClick={onStart}>
+            <span>Try asking:</span>
+            {PROMPTS.map((prompt) => (
+              <button key={prompt} className="prompt-chip" onClick={onStart}>
                 {prompt}
               </button>
             ))}
@@ -152,87 +195,58 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      {/* Features Section */}
       <section className="features-section">
-        <div className="section-header">
-          <h2>Engineered for Excellence</h2>
-          <p>Built on a foundation of precision and speed.</p>
-        </div>
-        
-        <div className="features-grid">
-          <div className="feature-card">
-            <div className="feature-icon i1"><Database /></div>
-            <h3>Local ChromaDB</h3>
-            <p>Your data stays on your machine. We use high-performance vector storage for instant retrieval.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon i2"><Zap /></div>
-            <h3>Instant Analysis</h3>
-            <p>Optimized for Llama-3 and TinyLlama architectures to give you sub-second response times.</p>
-          </div>
-          <div className="feature-card">
-            <div className="feature-icon i3"><Globe /></div>
-            <h3>Scalable Ingestion</h3>
-            <p>Seamlessly upload and index thousands of medical PDF pages with automated chunking.</p>
+        <div className="section-wrap">
+          <div className="section-label">Capabilities</div>
+          <h2>Everything you need for document Q&amp;A</h2>
+          <div className="features-grid">
+            {FEATURES.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="feature-card">
+                <div className="feature-icon">
+                  <Icon size={22} />
+                </div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Workflow Section */}
-      <section className="workflow-section">
-        <div className="workflow-container">
-          <div className="workflow-image">
-            <div className="abstract-shape"></div>
-            <div className="workflow-step-visual">
-                <div className="v-step"><Layers size={40} /></div>
-                <div className="v-line"></div>
-                <div className="v-step"><Cpu size={40} /></div>
-                <div className="v-line"></div>
-                <div className="v-step active"><Stethoscope size={40} /></div>
-            </div>
-          </div>
-          <div className="workflow-content">
-            <h2>How it Works</h2>
-            <div className="step-list">
-              <div className="step-item">
-                <div className="step-num">01</div>
-                <div className="step-text">
-                  <h3>Ingest Documents</h3>
-                  <p>Upload your medical PDFs. Our system splits them into semantic chunks for better context mapping.</p>
-                </div>
+      <section className="steps-section">
+        <div className="section-wrap">
+          <div className="section-label">How it works</div>
+          <h2>Three steps to get answers</h2>
+          <div className="steps-grid">
+            {STEPS.map(({ num, title, desc }) => (
+              <div key={num} className="step-card">
+                <div className="step-num">{num}</div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
               </div>
-              <div className="step-item">
-                <div className="step-num">02</div>
-                <div className="step-text">
-                  <h3>Vector Indexing</h3>
-                  <p>Text is converted into high-dimensional embeddings and stored in our local vector database.</p>
-                </div>
-              </div>
-              <div className="step-item">
-                <div className="step-num">03</div>
-                <div className="step-text">
-                  <h3>Expert Consultation</h3>
-                  <p>Ask questions. The RAG pipeline retrieves evidence and the LLM generates a precise response.</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
+      <section className="cta-section">
+        <div className="cta-card">
+          <h2>Ready to consult your documents?</h2>
+          <p>Create an account and start asking questions in minutes.</p>
+          <div className="cta-actions">
+            <button className="btn-primary" onClick={onStart}>Launch MedAssist</button>
+            <Link to="/login" className="btn-ghost-light">I already have an account</Link>
+          </div>
+        </div>
+      </section>
+
       <footer className="landing-footer">
-        <div className="footer-container">
-          <div className="footer-logo">
-            <Stethoscope size={24} />
-            <span>MedAssist RAG</span>
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <Stethoscope size={20} />
+            <span>MedAssist</span>
           </div>
-          <p>© 2026 Medical Assistant RAG. Built for Professionals.</p>
-          <div className="footer-links">
-            <a href="#">Documentation</a>
-            <a href="#">Github</a>
-            <a href="#">Privacy</a>
-          </div>
+          <p>© 2026 Medical Assistant RAG</p>
         </div>
       </footer>
     </div>
