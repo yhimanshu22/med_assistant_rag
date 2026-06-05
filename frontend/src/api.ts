@@ -81,6 +81,17 @@ export const logout = async (token?: string): Promise<void> => {
   if (!response.ok) throw new Error(await parseApiError(response));
 };
 
+export interface HealthStatus {
+  status: string;
+  evaluation_enabled: boolean;
+}
+
+export const getHealth = async (): Promise<HealthStatus> => {
+  const response = await fetch(`${API_BASE_URL}/health`);
+  if (!response.ok) throw new Error(`Health check failed (${response.status})`);
+  return response.json();
+};
+
 export const getMe = async (token?: string): Promise<AuthUser> => {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: authHeaders(token),
@@ -97,7 +108,7 @@ export const queryMedicalAssistant = async (question: string, chat_history?: { r
 export const queryMedicalAssistantStream = async (
   question: string,
   chat_history: { role: string; content: string }[] | undefined,
-  onEvent: (evt: { type: string; text?: string; sources?: any; confidence?: number; metrics?: any; total_time?: string; message?: string }) => void,
+  onEvent: (evt: { type: string; text?: string; sources?: any; confidence?: number; metrics?: any; evaluation_enabled?: boolean; total_time?: string; message?: string }) => void,
   signal?: AbortSignal,
 ): Promise<void> => {
   const response = await fetch(`${API_BASE_URL}/query/stream`, {

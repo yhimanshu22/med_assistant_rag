@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Message, IngestionLog, Conversation } from './types';
-import { queryMedicalAssistantStream, ingestDocuments } from './api';
+import { queryMedicalAssistantStream, ingestDocuments, getHealth } from './api';
 import { 
   Plus,
   MessageSquare,
@@ -23,6 +23,7 @@ import {
   FileCheck,
   Timer,
   ShieldCheck,
+  ShieldOff,
   CheckCircle2, 
   AlertCircle,
   LogOut,
@@ -51,6 +52,38 @@ const getTrustClass = (score: number) => {
   return 'low';
 };
 
+const ZERO_METRICS = { faithfulness: 0, relevance: 0 };
+
+const isMessageEvalOn = (msg: Message, globalEvalOn: boolean) =>
+  msg.evaluationEnabled === true || (msg.evaluationEnabled === undefined && globalEvalOn);
+
+const getDisplayConfidence = (msg: Message, globalEvalOn: boolean) =>
+  isMessageEvalOn(msg, globalEvalOn) ? Math.round((msg.confidence || 0) * 100) : 0;
+
+const getDisplayMetric = (
+  msg: Message,
+  key: 'faithfulness' | 'relevance',
+  globalEvalOn: boolean,
+) => (isMessageEvalOn(msg, globalEvalOn) ? Math.round((msg.metrics?.[key] || 0) * 100) : 0);
+
+const normalizeStoredMessage = (msg: Message, globalEvalOn: boolean): Message => {
+  if (msg.role !== 'assistant' || isMessageEvalOn(msg, globalEvalOn)) {
+    return msg;
+  }
+  return {
+    ...msg,
+    evaluationEnabled: false,
+    confidence: 0,
+    metrics: ZERO_METRICS,
+  };
+};
+
+const normalizeStoredConversations = (convs: Conversation[], globalEvalOn: boolean): Conversation[] =>
+  convs.map((c) => ({
+    ...c,
+    messages: c.messages.map((m) => normalizeStoredMessage(m, globalEvalOn)),
+  }));
+
 const ChatApp: React.FC = () => {
   const { email, logout } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -71,6 +104,20 @@ const ChatApp: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const prevActiveIdRef = useRef<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [evaluationEnabled, setEvaluationEnabled] = useState(false);
+
+  useEffect(() => {
+    getHealth()
+      .then((health) => {
+        const evalOn = health.evaluation_enabled;
+        setEvaluationEnabled(evalOn);
+        setConversations((prev) => normalizeStoredConversations(prev, evalOn));
+      })
+      .catch(() => {
+        setEvaluationEnabled(false);
+        setConversations((prev) => normalizeStoredConversations(prev, false));
+      });
+  }, []);
 
   const startNewChat = () => {
     const newId = Date.now().toString();
@@ -120,8 +167,8 @@ const ChatApp: React.FC = () => {
     
     if (savedConversations) {
       try {
-        const parsed = JSON.parse(savedConversations);
-        setConversations(parsed);
+        const parsed = JSON.parse(savedConversations) as Conversation[];
+        setConversations(normalizeStoredConversations(parsed, false));
         if (savedActiveId) setActiveConversationId(savedActiveId);
         else if (parsed.length > 0) setActiveConversationId(parsed[0].id);
       } catch (e) {
@@ -202,6 +249,7 @@ const ChatApp: React.FC = () => {
       let finalSources: any[] | undefined;
       let finalConfidence: number | undefined;
       let finalMetrics: any | undefined;
+      let finalEvaluationEnabled: boolean | undefined;
       let finalTotalTime: string | undefined;
 
       await queryMedicalAssistantStream(question, chatHistory, (evt) => {
@@ -209,6 +257,14 @@ const ChatApp: React.FC = () => {
           finalSources = evt.sources;
           finalConfidence = evt.confidence;
           finalMetrics = evt.metrics;
+          finalEvaluationEnabled = evt.evaluation_enabled ?? false;
+          if (evt.evaluation_enabled !== undefined) {
+            setEvaluationEnabled(evt.evaluation_enabled);
+          }
+          if (!finalEvaluationEnabled) {
+            finalConfidence = 0;
+            finalMetrics = ZERO_METRICS;
+          }
           updateActiveConversation(prev => {
             const next = [...prev];
             const last = next[next.length - 1];
@@ -216,6 +272,7 @@ const ChatApp: React.FC = () => {
               last.sources = finalSources as any;
               last.confidence = finalConfidence;
               last.metrics = finalMetrics;
+              last.evaluationEnabled = finalEvaluationEnabled;
             }
             return next;
           });
@@ -478,9 +535,15 @@ const ChatApp: React.FC = () => {
                 </div>
                 <div className="chat-header-sub">Evidence-based answers from your documents</div>
               </div>
-              <div className="chat-header-badge">
-                <ShieldCheck size={12} />
-                RAG Active
+              <div className="chat-header-badges">
+                <div className="chat-header-badge active">
+                  <ShieldCheck size={12} />
+                  RAG Active
+                </div>
+                <div className={`chat-header-badge ${evaluationEnabled ? 'eval-on' : 'eval-off'}`}>
+                  {evaluationEnabled ? <ShieldCheck size={12} /> : <ShieldOff size={12} />}
+                  {evaluationEnabled ? 'Evaluation On' : 'Evaluation Off'}
+                </div>
               </div>
             </div>
 
@@ -563,39 +626,65 @@ const ChatApp: React.FC = () => {
                       </div>
                     )}
                     
-                    {msg.confidence !== undefined && (
+                    {msg.role === 'assistant' && msg.confidence !== undefined && (
                       <div className="trust-indicator-container">
-                        <div className={`trust-score-badge ${getTrustClass(msg.confidence)}`}>
-                          <ShieldCheck size={13} />
-                          <span>Trust {Math.round(msg.confidence * 100)}%</span>
+                        {(() => {
+                          const evalOn = isMessageEvalOn(msg, evaluationEnabled);
+                          const trustPct = getDisplayConfidence(msg, evaluationEnabled);
+                          const faithPct = getDisplayMetric(msg, 'faithfulness', evaluationEnabled);
+                          const relPct = getDisplayMetric(msg, 'relevance', evaluationEnabled);
+                          return (
+                            <>
+                        <div className={`trust-score-badge ${evalOn ? getTrustClass(msg.confidence || 0) : 'eval-off'}`}>
+                          {evalOn ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}
+                          <span>
+                            {evalOn
+                              ? `Trust ${trustPct}%`
+                              : 'Trust 0% · Evaluation off'}
+                          </span>
                           <div className="trust-tooltip">
-                            <div className="tooltip-item">
-                              <span>Faithfulness:</span>
-                              <strong>{Math.round((msg.metrics?.faithfulness || 0) * 100)}%</strong>
-                            </div>
-                            <div className="tooltip-item">
-                              <span>Relevance:</span>
-                              <strong>{Math.round((msg.metrics?.relevance || 0) * 100)}%</strong>
-                            </div>
+                            {evalOn ? (
+                              <>
+                                <div className="tooltip-item">
+                                  <span>Faithfulness:</span>
+                                  <strong>{faithPct}%</strong>
+                                </div>
+                                <div className="tooltip-item">
+                                  <span>Relevance:</span>
+                                  <strong>{relPct}%</strong>
+                                </div>
+                              </>
+                            ) : (
+                              <span>Ragas trust scoring is disabled for faster responses.</span>
+                            )}
                           </div>
                         </div>
+                        {!evalOn && (
+                          <div className="eval-status-chip" title="Ragas faithfulness/relevance scoring is disabled">
+                            <ShieldOff size={12} />
+                            <span>Evaluation off</span>
+                          </div>
+                        )}
                         {msg.total_time && (
                           <div className="response-meta">
                             <Timer size={12} />
                             <span>{msg.total_time}</span>
                           </div>
                         )}
-                        
-                        <div className="evaluation-metrics-row">
+
+                        <div className={`evaluation-metrics-row ${!evalOn ? 'disabled' : ''}`}>
                           <div className="metric-chip faithfulness" title="Faithfulness (Groundedness)">
                             <FileCheck size={12} />
-                            <span>Faith: {Math.round((msg.metrics?.faithfulness || 0) * 100)}%</span>
+                            <span>Faith: {faithPct}%</span>
                           </div>
                           <div className="metric-chip relevance" title="Answer Relevance">
                             <Search size={12} />
-                            <span>Rel: {Math.round((msg.metrics?.relevance || 0) * 100)}%</span>
+                            <span>Rel: {relPct}%</span>
                           </div>
                         </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                     </div>

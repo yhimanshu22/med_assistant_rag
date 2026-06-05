@@ -15,6 +15,7 @@ export interface Message {
   timestamp: number;
   total_time?: string;
   confidence?: number;
+  evaluationEnabled?: boolean;
   metrics?: {
     faithfulness: number;
     relevance: number;
@@ -39,6 +40,7 @@ export interface QueryResponse {
   source_documents: DocumentSource[];
   total_time: string;
   confidence: number;
+  evaluation_enabled: boolean;
   metrics: {
     faithfulness: number;
     relevance: number;

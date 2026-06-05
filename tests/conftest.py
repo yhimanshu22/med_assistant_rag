@@ -1,3 +1,10 @@
+# Use an isolated SQLite file for tests — never wipe production users.db
+import os
+from pathlib import Path
+
+_TEST_DB = Path(__file__).resolve().parent / ".test_users.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB.resolve().as_posix()}"
+
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
@@ -19,8 +26,9 @@ def mock_rag_service():
                     "metadata": {"source": "mock_file.pdf", "page": 1},
                 }
             ],
-            "confidence": 1.0,
-            "metrics": {"faithfulness": 1.0, "relevance": 1.0},
+            "confidence": 0.0,
+            "metrics": {"faithfulness": 0.0, "relevance": 0.0},
+            "evaluation_enabled": False,
         }
         yield mock_answer
 

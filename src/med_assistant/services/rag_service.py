@@ -15,6 +15,63 @@ from med_assistant.services.llm_service import get_llm
 from med_assistant.services.evaluation_service import EvaluatorService
 from langchain.prompts import PromptTemplate
 
+_CONVERSATIONAL_EXACT = frozenset({
+    "hi", "hii", "hiii", "hello", "hey", "heya", "hiya", "howdy", "yo", "sup",
+    "good morning", "good afternoon", "good evening", "good night",
+    "thanks", "thank you", "thx", "ty", "thankyou",
+    "bye", "goodbye", "see you", "cya", "ok", "okay", "cool", "nice",
+})
+_MEDICAL_HINTS = re.compile(
+    r"\b(what|how|why|when|where|which|explain|symptom|treatment|disease|diagnosis|"
+    r"drug|medicine|patient|dose|dosage|anemia|influenza|cancer|diabetes|infection|"
+    r"therapy|clinical|guideline|condition|disorder|syndrome|pathology)\b",
+    re.I,
+)
+
+_GREETING_RE = re.compile(
+    r"^(hi+|hello+|hey+|hiya|howdy|yo|sup|good\s*(morning|afternoon|evening|night)|"
+    r"what'?s\s*up|greetings?)[\s!.?]*$",
+    re.I,
+)
+_THANKS_RE = re.compile(r"^(thanks?|thank\s*you|thx|ty|thankyou|appreciate\s*it)[\s!.?]*$", re.I)
+_BYE_RE = re.compile(r"^(bye+|good\s*bye|see\s*ya|cya|take\s*care)[\s!.?]*$", re.I)
+
+
+def is_conversational_query(question: str) -> bool:
+    """Greetings, thanks, bye, and other non-document small talk — skip full RAG."""
+    q = question.strip()
+    if not q:
+        return True
+
+    q_lower = q.lower()
+    q_clean = re.sub(r"[^\w\s]", "", q_lower).strip()
+    q_norm = re.sub(r"\s+", " ", q_clean)
+
+    if q_norm in _CONVERSATIONAL_EXACT:
+        return True
+    if _GREETING_RE.match(q_norm) or _THANKS_RE.match(q_norm) or _BYE_RE.match(q_norm):
+        return True
+
+    if "?" in q or _MEDICAL_HINTS.search(q):
+        return False
+
+    return len(q_norm.split()) <= 4
+
+
+def conversational_reply(question: str) -> str:
+    q_norm = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", question.strip().lower())).strip()
+    if q_norm in {"thanks", "thank you", "thx", "ty", "thankyou"} or _THANKS_RE.match(q_norm):
+        return (
+            "You're welcome! Let me know if you have more questions about your uploaded medical documents."
+        )
+    if q_norm in {"bye", "goodbye", "see you", "cya"} or _BYE_RE.match(q_norm):
+        return "Goodbye! Come back anytime you need help with your medical documents."
+    return (
+        "Hello! I'm MedAssist, your medical document assistant. "
+        "Ask me anything about conditions, symptoms, or treatments in your uploaded PDFs."
+    )
+
+
 class RAGService:
     def __init__(self):
         self.llm = None
@@ -50,8 +107,11 @@ class RAGService:
             cache_folder=settings.MODEL_CACHE_DIR
         )
 
-        # 1.1 Initialize Evaluator using the selected LLM
-        self.evaluator = EvaluatorService(self.llm, embeddings)
+        if settings.ENABLE_RAG_EVALUATION:
+            self.evaluator = EvaluatorService(self.llm, embeddings)
+        else:
+            self.evaluator = None
+            print("Ragas evaluation disabled (faster responses). Set ENABLE_RAG_EVALUATION=true to enable.")
 
         # 3. Load VectorDB
         print(f"Loading ChromaDB from {settings.DB_DIR}...")
@@ -127,6 +187,52 @@ Detailed Evidence-Based Answer:"""
             print(f"Warning: failed to build BM25 index from Chroma: {e}")
             self._bm25_docs = []
             self._bm25 = None
+
+    @property
+    def evaluation_enabled(self) -> bool:
+        return bool(settings.ENABLE_RAG_EVALUATION and self.evaluator)
+
+    def _default_eval_scores(self) -> Dict[str, float]:
+        return {"faithfulness": 0.0, "relevance": 0.0, "confidence_score": 0.0}
+
+    def _evaluate_if_enabled(self, question: str, context: str, answer: str) -> Dict[str, float]:
+        if not self.evaluation_enabled:
+            return self._default_eval_scores()
+        return self.evaluator.evaluate_response(question, context, answer)
+
+    def _build_result(
+        self,
+        answer: str,
+        sources: List[Dict[str, Any]],
+        eval_results: Dict[str, float],
+    ) -> Dict[str, Any]:
+        enabled = self.evaluation_enabled
+        if not enabled:
+            eval_results = self._default_eval_scores()
+        return {
+            "answer": answer,
+            "sources": sources,
+            "confidence": eval_results["confidence_score"],
+            "metrics": {
+                "faithfulness": eval_results["faithfulness"],
+                "relevance": eval_results["relevance"],
+            },
+            "evaluation_enabled": enabled,
+        }
+
+    def _normalize_cached_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Re-apply current evaluation settings to in-memory cached answers."""
+        if self.evaluation_enabled:
+            return result
+        normalized = dict(result)
+        normalized["evaluation_enabled"] = False
+        normalized["confidence"] = 0.0
+        normalized["metrics"] = {"faithfulness": 0.0, "relevance": 0.0}
+        return normalized
+
+    def _conversational_answer(self, question: str) -> Dict[str, Any]:
+        answer = conversational_reply(question)
+        return self._build_result(answer, [], self._default_eval_scores())
 
     def _rewrite_question(self, question: str, chat_history: Optional[list]) -> str:
         if not chat_history:
@@ -221,11 +327,20 @@ Detailed Evidence-Based Answer:"""
         if not self.vectordb or not self.llm:
             raise RuntimeError("RAG Service is not initialized.")
 
+        if is_conversational_query(question):
+            cache_key = f"conv::{question.strip().lower()}"
+            cached = self._answer_cache.get(cache_key)
+            if cached:
+                return self._normalize_cached_result(cached)
+            result = self._conversational_answer(question)
+            self._answer_cache[cache_key] = result
+            return result
+
         standalone_q = self._rewrite_question(question, chat_history)
         cache_key = f"q::{standalone_q}"
         cached = self._answer_cache.get(cache_key)
         if cached:
-            return cached
+            return self._normalize_cached_result(cached)
 
         # Retrieval cache (docs only; avoids repeated DB lookups on same query)
         r_cached = self._retrieval_cache.get(cache_key)
@@ -260,16 +375,10 @@ Detailed Evidence-Based Answer:"""
                 "- Providing the page/section you want me to use\n"
             )
             sources = [{"page_content": d.page_content, "metadata": d.metadata} for d in source_docs]
-            eval_results = self.evaluator.evaluate_response(question, "\n".join([d.page_content for d in source_docs])[:6000], answer)
-            return {
-                "answer": answer,
-                "sources": sources,
-                "confidence": eval_results["confidence_score"],
-                "metrics": {
-                    "faithfulness": eval_results["faithfulness"],
-                    "relevance": eval_results["relevance"],
-                },
-            }
+            eval_results = self._evaluate_if_enabled(
+                question, "\n".join([d.page_content for d in source_docs])[:6000], answer
+            )
+            return self._build_result(answer, sources, eval_results)
 
         context = "\n\n".join(
             [
@@ -284,12 +393,11 @@ Detailed Evidence-Based Answer:"""
             answer = answer.content if hasattr(answer, "content") else str(answer)
             answer = str(answer).strip()
         except Exception as e:
-            return {
-                "answer": f"I encountered an error while processing your request: {str(e)}",
-                "sources": [],
-                "confidence": 0.0,
-                "metrics": {"faithfulness": 0.0, "relevance": 0.0},
-            }
+            return self._build_result(
+                f"I encountered an error while processing your request: {str(e)}",
+                [],
+                self._default_eval_scores(),
+            )
 
         # Format sources
         sources = [{"page_content": doc.page_content, "metadata": doc.metadata} for doc in source_docs]
@@ -300,17 +408,8 @@ Detailed Evidence-Based Answer:"""
         if len(context_str) > 6000:
             context_str = context_str[:6000] + "... [context truncated]"
             
-        eval_results = self.evaluator.evaluate_response(question, context_str, answer)
-        
-        result = {
-            "answer": answer,
-            "sources": sources,
-            "confidence": eval_results["confidence_score"],
-            "metrics": {
-                "faithfulness": eval_results["faithfulness"],
-                "relevance": eval_results["relevance"]
-            }
-        }
+        eval_results = self._evaluate_if_enabled(question, context_str, answer)
+        result = self._build_result(answer, sources, eval_results)
 
         self._answer_cache[cache_key] = result
         if len(self._answer_cache) > self._cache_max_entries:
@@ -327,11 +426,17 @@ Detailed Evidence-Based Answer:"""
         result = self.answer_question(question, chat_history)
         answer = result.get("answer", "")
         sources = result.get("sources", [])
-        confidence = result.get("confidence", 1.0)
+        confidence = result.get("confidence", 0.0)
         metrics = result.get("metrics", {})
+        evaluation_enabled = result.get("evaluation_enabled", self.evaluation_enabled)
 
-        # Initial metadata (lets frontend show citations area immediately if desired)
-        yield {"type": "meta", "sources": sources, "confidence": confidence, "metrics": metrics}
+        yield {
+            "type": "meta",
+            "sources": sources,
+            "confidence": confidence,
+            "metrics": metrics,
+            "evaluation_enabled": evaluation_enabled,
+        }
 
         for i in range(0, len(answer), chunk_size):
             yield {"type": "delta", "text": answer[i : i + chunk_size]}

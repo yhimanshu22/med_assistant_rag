@@ -1,4 +1,10 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_DEFAULT_DATABASE_URL = f"sqlite:///{(_PROJECT_ROOT / 'users.db').resolve().as_posix()}"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -22,8 +28,11 @@ class Settings(BaseSettings):
     # Cross-encoder reranker model for relevance reranking
     RERANKER_MODEL_ID: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
+    # Ragas faithfulness/relevance scoring adds multiple extra LLM calls per answer (very slow on CPU).
+    ENABLE_RAG_EVALUATION: bool = False
+
     # Auth
-    DATABASE_URL: str = "sqlite:///./users.db"
+    DATABASE_URL: str = _DEFAULT_DATABASE_URL
     SECRET_KEY: str = "change-me-in-production-use-a-long-random-secret"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days

@@ -391,17 +391,35 @@
   margin-top: 1px;
 }
 
+.chat-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .chat-header-badge {
   display: flex;
   align-items: center;
   gap: 5px;
   font-size: 0.7rem;
   font-weight: 600;
-  color: #059669;
-  background: #ecfdf5;
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
+  white-space: nowrap;
+}
+
+.chat-header-badge.active,
+.chat-header-badge.eval-on {
+  color: #059669;
+  background: #ecfdf5;
   border: 1px solid #a7f3d0;
+}
+
+.chat-header-badge.eval-off {
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
 }
 
 .chat-history {
@@ -712,6 +730,25 @@
   border: 1px solid #fecaca;
 }
 
+.trust-score-badge.eval-off {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.eval-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
 .trust-tooltip {
   position: absolute;
   bottom: 100%;
@@ -759,6 +796,12 @@
 .evaluation-metrics-row {
   display: flex;
   gap: 6px;
+}
+
+.evaluation-metrics-row.disabled .metric-chip {
+  opacity: 0.65;
+  color: #94a3b8;
+  background: #f8fafc;
 }
 
 .metric-chip {

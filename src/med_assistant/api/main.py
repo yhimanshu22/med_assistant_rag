@@ -21,6 +21,7 @@ from med_assistant.api.deps import get_current_user
 from med_assistant.db.database import init_db
 from med_assistant.models.schemas import QueryRequest, QueryResponse, DocumentSource
 from med_assistant.models.user import User
+from med_assistant.core.config import settings
 from med_assistant.services.rag_service import RAGService
 from med_assistant.services.ingestion_service import ingest_documents_generator
 
@@ -55,7 +56,10 @@ app.add_middleware(
 @app.get("/health")
 async def health_endpoint():
     ready = bool(rag_service.llm and rag_service.vectordb)
-    return {"status": "ready" if ready else "starting"}
+    return {
+        "status": "ready" if ready else "starting",
+        "evaluation_enabled": settings.ENABLE_RAG_EVALUATION,
+    }
 
 @app.post("/query", response_model=QueryResponse)
 async def query_endpoint(request: QueryRequest, _: User = Depends(get_current_user)):
@@ -85,8 +89,9 @@ async def query_endpoint(request: QueryRequest, _: User = Depends(get_current_us
             answer=answer_text,
             source_documents=source_docs,
             total_time=total_time,
-            confidence=response.get('confidence', 1.0),
-            metrics=response.get('metrics', {})
+            confidence=response.get('confidence', 0.0),
+            metrics=response.get('metrics', {}),
+            evaluation_enabled=response.get('evaluation_enabled', False),
         )
     except Exception as e:
         logger.error(f"Error in query endpoint: {str(e)}")

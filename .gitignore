@@ -18,6 +18,7 @@ data/
 chroma_db/
 models_cache/
 users.db
+tests/.test_users.db
 
 # Testing
 .pytest_cache/

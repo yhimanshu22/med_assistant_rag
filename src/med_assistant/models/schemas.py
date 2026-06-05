@@ -35,5 +35,6 @@ class QueryResponse(BaseModel):
     answer: str
     source_documents: Optional[List[DocumentSource]] = []
     total_time: str
-    confidence: Optional[float] = 1.0
+    confidence: Optional[float] = 0.0
     metrics: Optional[Dict[str, float]] = {}
+    evaluation_enabled: bool = False
