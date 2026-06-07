@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import './LandingPage.css';
+import './MarketingPage.css';
 import demoPreview from '../assets/demo-preview.png';
 
 interface LandingPageProps {
@@ -184,15 +185,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      <section className="features-section">
-        <div className="section-wrap">
-          <div className="section-label">Capabilities</div>
-          <h2>Everything you need for document Q&amp;A</h2>
-          <div className="features-grid">
+      <section className="landing-marketing-block">
+        <div className="marketing-content">
+          <div className="marketing-section-header">
+            <div className="marketing-eyebrow">Capabilities</div>
+            <h2>Everything you need for document Q&amp;A</h2>
+          </div>
+          <div className="marketing-grid">
             {FEATURES.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="feature-card">
-                <div className="feature-icon">
-                  <Icon size={22} />
+              <div key={title} className="marketing-card">
+                <div className="marketing-card-icon">
+                  <Icon size={20} />
                 </div>
                 <h3>{title}</h3>
                 <p>{desc}</p>
@@ -202,14 +205,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      <section className="steps-section">
-        <div className="section-wrap">
-          <div className="section-label">How it works</div>
-          <h2>Three steps to get answers</h2>
-          <div className="steps-grid">
+      <section className="landing-marketing-block landing-marketing-block--alt">
+        <div className="marketing-content">
+          <div className="marketing-section-header">
+            <div className="marketing-eyebrow">How it works</div>
+            <h2>Three steps to get answers</h2>
+          </div>
+          <div className="marketing-grid marketing-grid--steps">
             {STEPS.map(({ num, title, desc }) => (
-              <div key={num} className="step-card">
-                <div className="step-num">{num}</div>
+              <div key={num} className="marketing-card">
+                <div className="marketing-card-icon marketing-card-icon--step">{num}</div>
                 <h3>{title}</h3>
                 <p>{desc}</p>
               </div>
@@ -218,13 +223,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      <section className="cta-section">
-        <div className="cta-card">
-          <h2>Ready to consult your documents?</h2>
-          <p>Create an account and start asking questions in minutes.</p>
-          <div className="cta-actions">
-            <button className="btn-primary" onClick={onStart}>Launch MedAssist</button>
-            <Link to="/login" className="btn-ghost-light">I already have an account</Link>
+      <section className="landing-marketing-block">
+        <div className="marketing-content">
+          <div className="marketing-cta">
+            <h2>Ready to consult your documents?</h2>
+            <p>Create an account and start asking questions in minutes.</p>
+            <div className="marketing-cta-actions">
+              <button type="button" className="btn-primary" onClick={onStart}>Launch MedAssist</button>
+              <Link to="/login" className="btn-ghost-light">I already have an account</Link>
+            </div>
           </div>
         </div>
       </section>
