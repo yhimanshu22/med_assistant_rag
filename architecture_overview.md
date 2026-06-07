@@ -193,7 +193,7 @@ The retrieval layer goes beyond a basic LangChain chain:
 `src/med_assistant/services/ingestion_service.py`:
 
 1. Scan `data/*.pdf`
-2. Extract text per page with `pypdf`, normalize, inject heading markers
+2. Extract text per page with `PyMuPDF`, normalize, inject heading markers
 3. Split with `RecursiveCharacterTextSplitter` (chunk_size=1000, overlap=100)
 4. Embed with `sentence-transformers/all-mpnet-base-v2`
 5. Persist to ChromaDB at `chroma_db/`
@@ -357,7 +357,7 @@ Loaded via `pydantic-settings` from an optional `.env` file:
 | **LLM / ML** | `torch`, `transformers`, `accelerate`, `einops`, `bitsandbytes`, `xformers` |
 | **RAG** | `langchain`, `langchain-community`, `langchain-huggingface`, `langchain-chroma` |
 | **Embeddings / retrieval** | `sentence-transformers`, `chromadb`, `rank-bm25` |
-| **Documents** | `pypdf` |
+| **Documents** | `PyMuPDF` |
 | **Evaluation** | `ragas`, `datasets` |
 | **Auth / DB** | `sqlalchemy`, `bcrypt`, `python-jose[cryptography]`, `email-validator` |
 

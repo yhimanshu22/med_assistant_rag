@@ -16,7 +16,7 @@ This project is a powerful Retrieval-Augmented Generation (RAG) system wrapped i
 *   **LLM & RAG**: `LangChain`, `HuggingFace Transformers`, `PyTorch` (`bitsandbytes`, `accelerate`, `xformers`)
 *   **Embeddings**: `Sentence-Transformers`
 *   **Vector Store**: `ChromaDB`
-*   **Document Parsers**: `PyPDF`
+*   **Document Parsers**: `PyMuPDF`
 
 ## 📋 Prerequisites
 *   Python 3.10+

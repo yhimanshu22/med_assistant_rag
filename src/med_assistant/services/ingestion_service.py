@@ -7,7 +7,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-import pypdf
+import fitz  # PyMuPDF
 import torch
 
 from med_assistant.core.config import settings
@@ -61,38 +61,37 @@ def ingest_documents_generator():
         doc_title = os.path.splitext(pdf_basename)[0]
         yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"Processing {pdf_basename}..."})
         try:
-            reader = pypdf.PdfReader(pdf_file)
-            total_pages = len(reader.pages)
-            yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"Total pages: {total_pages}"})
-            
-            file_docs = []
-            for i, page in enumerate(reader.pages):
-                text = page.extract_text()
-                if text:
-                    text = _inject_heading_markers(_normalize_pdf_text(text))
-                    doc = Document(
-                        page_content=text,
-                        metadata={
-                            "source": pdf_basename,
-                            "doc_title": doc_title,
-                            # Keep original `page` for backwards compatibility (0-indexed)
-                            "page": i,
-                            # Newer metadata (1-indexed for display)
-                            "page_number": i + 1,
-                            "page_start": i + 1,
-                            "page_end": i + 1,
-                            "total_pages": total_pages,
-                        },
-                    )
-                    file_docs.append(doc)
-                
-                if (i + 1) % 50 == 0:
-                    yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"  Loaded {i + 1}/{total_pages} pages..."})
-                
-            yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"  Finished loading {len(file_docs)} pages from {pdf_basename}."})
-            documents.extend(file_docs)
+            with fitz.open(pdf_file) as pdf_doc:
+                total_pages = len(pdf_doc)
+                yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"Total pages: {total_pages}"})
 
-            
+                file_docs = []
+                for i in range(total_pages):
+                    text = pdf_doc[i].get_text()
+                    if text:
+                        text = _inject_heading_markers(_normalize_pdf_text(text))
+                        doc = Document(
+                            page_content=text,
+                            metadata={
+                                "source": pdf_basename,
+                                "doc_title": doc_title,
+                                # Keep original `page` for backwards compatibility (0-indexed)
+                                "page": i,
+                                # Newer metadata (1-indexed for display)
+                                "page_number": i + 1,
+                                "page_start": i + 1,
+                                "page_end": i + 1,
+                                "total_pages": total_pages,
+                            },
+                        )
+                        file_docs.append(doc)
+
+                    if (i + 1) % 50 == 0:
+                        yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"  Loaded {i + 1}/{total_pages} pages..."})
+
+                yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"  Finished loading {len(file_docs)} pages from {pdf_basename}."})
+                documents.extend(file_docs)
+
         except Exception as e:
             yield json.dumps({"step": "processing", "file": pdf_basename, "message": f"Error reading {pdf_basename}: {e}", "status": "error"})
 
