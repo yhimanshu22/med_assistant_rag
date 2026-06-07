@@ -1,6 +1,6 @@
 import React from 'react';
-import { Stethoscope } from 'lucide-react';
 import LandingNav from './LandingNav';
+import LandingFooter from './LandingFooter';
 import './LandingPage.css';
 import './MarketingPage.css';
 
@@ -13,15 +13,7 @@ const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) => {
     <div className="landing-page">
       <LandingNav />
       <main className="marketing-main">{children}</main>
-      <footer className="landing-footer">
-        <div className="footer-inner">
-          <div className="footer-brand">
-            <Stethoscope size={20} />
-            <span>MedAssist</span>
-          </div>
-          <p>© 2026 Medical Assistant RAG</p>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   );
 };

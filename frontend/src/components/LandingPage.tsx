@@ -1,9 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import LandingNav from './LandingNav';
+import LandingFooter from './LandingFooter';
 import { motion } from 'framer-motion';
 import {
-  Stethoscope,
   ShieldCheck,
   ArrowRight,
   Database,
@@ -229,15 +229,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      <footer className="landing-footer">
-        <div className="footer-inner">
-          <div className="footer-brand">
-            <Stethoscope size={20} />
-            <span>MedAssist</span>
-          </div>
-          <p>© 2026 Medical Assistant RAG</p>
-        </div>
-      </footer>
+      <LandingFooter />
     </div>
   );
 };

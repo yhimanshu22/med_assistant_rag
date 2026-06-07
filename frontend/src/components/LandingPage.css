@@ -692,7 +692,7 @@
 
 /* Footer */
 .landing-footer {
-  padding: 2rem 1.5rem;
+  padding: 3rem 1.5rem 2rem;
   border-top: 1px solid var(--lp-border);
   background: var(--lp-surface);
 }
@@ -702,24 +702,89 @@
   max-width: none;
   margin: 0 auto;
   padding: 0 2rem;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 0.8fr;
+  gap: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.footer-brand-col {
+  max-width: 320px;
+}
+
+.footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--lp-primary);
+  text-decoration: none;
+  margin-bottom: 0.75rem;
+}
+
+.footer-brand:hover {
+  color: var(--lp-primary-dark);
+}
+
+.footer-tagline {
+  font-size: 0.9rem;
+  color: var(--lp-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.footer-links-col h4 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lp-text);
+  margin: 0 0 1rem;
+}
+
+.footer-links-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.footer-links-col a {
+  text-decoration: none;
+  color: var(--lp-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.15s;
+}
+
+.footer-links-col a:hover {
+  color: var(--lp-primary);
+}
+
+.footer-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  padding-top: 1.5rem;
 }
 
-.footer-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 700;
-  color: var(--lp-primary);
-}
-
-.footer-inner > p {
+.footer-bottom p {
   font-size: 0.875rem;
   color: var(--lp-muted);
+  margin: 0;
+}
+
+.footer-disclaimer {
+  font-size: 0.8rem !important;
 }
 
 /* Responsive */
@@ -759,6 +824,23 @@
   }
 }
 
+@media (max-width: 768px) {
+  .footer-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .footer-brand-col {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 @media (max-width: 520px) {
   .hero-preview {
     display: none;
@@ -766,5 +848,9 @@
 
   .section-wrap h2 {
     font-size: 1.6rem;
+  }
+
+  .footer-grid {
+    grid-template-columns: 1fr;
   }
 }

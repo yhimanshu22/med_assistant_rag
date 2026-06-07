@@ -2,14 +2,8 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Stethoscope } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { PRODUCT_LINKS } from './landingLinks';
 import './LandingPage.css';
-
-const NAV_ITEMS = [
-  { label: 'For Clinicians', path: '/clinicians' },
-  { label: 'For Partners', path: '/partners' },
-  { label: 'Integrations', path: '/integrations' },
-  { label: 'About MedAssist', path: '/about' },
-] as const;
 
 const LandingNav: React.FC = () => {
   const navigate = useNavigate();
@@ -29,7 +23,7 @@ const LandingNav: React.FC = () => {
         </Link>
 
         <div className="nav-links">
-          {NAV_ITEMS.map(({ label, path }) => (
+          {PRODUCT_LINKS.map(({ label, path }) => (
             <Link
               key={path}
               to={path}
