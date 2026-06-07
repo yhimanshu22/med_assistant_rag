@@ -32,6 +32,10 @@ import {
 } from 'lucide-react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
+import CliniciansPage from './components/CliniciansPage';
+import PartnersPage from './components/PartnersPage';
+import IntegrationsPage from './components/IntegrationsPage';
+import AboutPage from './components/AboutPage';
 import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -844,6 +848,11 @@ const App: React.FC = () => {
             <LandingPage onStart={() => navigate(isAuthenticated ? '/chat' : '/login')} />
           </motion.div>
         } />
+
+        <Route path="/clinicians" element={<div className="route-shell"><CliniciansPage /></div>} />
+        <Route path="/partners" element={<div className="route-shell"><PartnersPage /></div>} />
+        <Route path="/integrations" element={<div className="route-shell"><IntegrationsPage /></div>} />
+        <Route path="/about" element={<div className="route-shell"><AboutPage /></div>} />
 
         <Route path="/login" element={<div className="route-shell"><LoginPage /></div>} />
         <Route path="/signup" element={<div className="route-shell"><SignupPage /></div>} />

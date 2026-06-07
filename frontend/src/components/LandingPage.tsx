@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import LandingNav from './LandingNav';
 import { motion } from 'framer-motion';
 import {
   Stethoscope,
@@ -58,19 +59,7 @@ const PROMPTS = [
 const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
   return (
     <div className="landing-page">
-      <nav className="landing-nav">
-        <div className="nav-container">
-          <div className="logo">
-            <Stethoscope size={26} strokeWidth={2.5} />
-            <span>MedAssist</span>
-          </div>
-          <div className="nav-actions">
-            <Link to="/login" className="nav-link">Login</Link>
-            <Link to="/signup" className="nav-link-primary">Sign up</Link>
-            <button className="nav-btn" onClick={onStart}>Open app</button>
-          </div>
-        </div>
-      </nav>
+      <LandingNav />
 
       <header className="hero">
         <div className="hero-inner">
