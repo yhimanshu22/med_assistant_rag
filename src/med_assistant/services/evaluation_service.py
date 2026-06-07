@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict
+import math
+from typing import Any, Dict
 import pandas as pd
 from datasets import Dataset
 
@@ -9,9 +10,40 @@ from ragas.metrics import faithfulness, answer_relevancy
 from ragas.llms import LangchainLLMWrapper
 from ragas.embeddings import LangchainEmbeddingsWrapper
 
-from langchain_huggingface import HuggingFacePipeline
-
 logger = logging.getLogger(__name__)
+
+
+def _extract_metric_score(result: Any, key: str) -> float:
+    """Read a Ragas metric score; return 0.0 (not a fake high score) when missing or NaN."""
+    try:
+        values = result[key]
+        if isinstance(values, pd.Series):
+            values = values.tolist()
+        if not isinstance(values, (list, tuple)) or not values:
+            logger.warning("Ragas metric %s returned no values", key)
+            return 0.0
+
+        numeric = []
+        for value in values:
+            try:
+                score = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isnan(score):
+                numeric.append(score)
+
+        if not numeric:
+            logger.warning("Ragas metric %s returned only NaN/invalid values", key)
+            return 0.0
+
+        return sum(numeric) / len(numeric)
+    except KeyError:
+        available = sorted(getattr(result, "_repr_dict", {}).keys())
+        logger.warning("Ragas result missing metric %s (available: %s)", key, available)
+        return 0.0
+    except (TypeError, ValueError, IndexError) as exc:
+        logger.warning("Failed to parse Ragas metric %s: %s", key, exc)
+        return 0.0
 
 class EvaluatorService:
     """Service to evaluate the clinical reliability of RAG responses using Ragas."""
@@ -43,11 +75,11 @@ class EvaluatorService:
         Evaluate the faithfulness and relevance of the answer using Ragas.
         Returns a dictionary with scores between 0 and 1.
         """
-        # Create dataset for Ragas (Ragas expects a list of contexts)
+        # Ragas 0.4+ expects these column names (legacy question/contexts/answer are ignored).
         data = {
-            "question": [query],
-            "contexts": [[context]],
-            "answer": [answer]
+            "user_input": [query],
+            "retrieved_contexts": [[context]],
+            "response": [answer],
         }
         dataset = Dataset.from_dict(data)
 
@@ -61,23 +93,8 @@ class EvaluatorService:
                 run_config=RunConfig(max_workers=1)
             )
             
-            # Helper to safely extract and convert scores
-            def safe_score(key, default=0.8):
-                try:
-                    # EvaluationResult can be accessed like a dict
-                    val = result[key]
-                    
-                    # If it's a list or sequence, take the first element
-                    if isinstance(val, (list, pd.Series)):
-                        val = val[0] if len(val) > 0 else default
-                    
-                    f_val = float(val)
-                    return f_val if not pd.isna(f_val) else default
-                except (KeyError, ValueError, TypeError, IndexError):
-                    return default
-
-            f_score = safe_score("faithfulness")
-            r_score = safe_score("answer_relevancy")
+            f_score = _extract_metric_score(result, "faithfulness")
+            r_score = _extract_metric_score(result, "answer_relevancy")
 
             
             # Combined confidence score (weighted average)

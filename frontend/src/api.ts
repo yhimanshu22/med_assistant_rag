@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QueryResponse, IngestionLog } from './types';
+import type { QueryResponse, IngestionLog, MetricsSnapshot } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const TOKEN_KEY = 'medassist_token';
@@ -92,6 +92,12 @@ export const getHealth = async (): Promise<HealthStatus> => {
   return response.json();
 };
 
+export const getMetrics = async (): Promise<MetricsSnapshot> => {
+  const response = await fetch(`${API_BASE_URL}/metrics`);
+  if (!response.ok) throw new Error(`Metrics fetch failed (${response.status})`);
+  return response.json();
+};
+
 export const getMe = async (token?: string): Promise<AuthUser> => {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     headers: authHeaders(token),
@@ -153,6 +159,15 @@ export const queryMedicalAssistantStream = async (
       } catch {
         // ignore parse errors on partial chunks
       }
+    }
+  }
+
+  const trailing = buffer.trim();
+  if (trailing) {
+    try {
+      onEvent(JSON.parse(trailing));
+    } catch {
+      // ignore parse errors on trailing chunk
     }
   }
 };

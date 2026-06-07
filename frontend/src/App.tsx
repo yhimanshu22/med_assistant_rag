@@ -36,8 +36,8 @@ import LoginPage from './components/LoginPage';
 import SignupPage from './components/SignupPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownAnswer from './components/MarkdownAnswer';
+import ModelMetricsDrawer from './components/ModelMetricsDrawer';
 import './App.css';
 
 const WELCOME_PROMPTS = [
@@ -90,6 +90,7 @@ const ChatApp: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [metricsRefreshKey, setMetricsRefreshKey] = useState(0);
   const [isIngesting, setIsIngesting] = useState(false);
   const [ingestionLogs, setIngestionLogs] = useState<IngestionLog[]>([]);
   const [expandedSources, setExpandedSources] = useState<Record<number, boolean>>({});
@@ -98,6 +99,8 @@ const ChatApp: React.FC = () => {
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const streamBufferRef = useRef('');
+  const followAnswerScrollRef = useRef(false);
   const prevActiveIdRef = useRef<string | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [evaluationAvailable, setEvaluationAvailable] = useState(true);
@@ -184,11 +187,18 @@ const ChatApp: React.FC = () => {
     const el = chatHistoryRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollDown(distanceFromBottom > 120);
+    if (distanceFromBottom > 120) {
+      followAnswerScrollRef.current = false;
+      setShowScrollDown(true);
+    } else {
+      setShowScrollDown(false);
+    }
   };
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    chatEndRef.current?.scrollIntoView({ behavior });
+    const el = chatHistoryRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
     setShowScrollDown(false);
   };
 
@@ -204,7 +214,13 @@ const ChatApp: React.FC = () => {
   useEffect(() => {
     if (activeConversationId !== prevActiveIdRef.current) {
       prevActiveIdRef.current = activeConversationId;
+      followAnswerScrollRef.current = false;
       requestAnimationFrame(() => scrollToBottom('auto'));
+      return;
+    }
+
+    if (followAnswerScrollRef.current) {
+      requestAnimationFrame(() => scrollToBottom(isLoading ? 'auto' : 'smooth'));
       return;
     }
 
@@ -212,7 +228,7 @@ const ChatApp: React.FC = () => {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom <= 120) {
-      scrollToBottom(isLoading ? 'auto' : 'smooth');
+      requestAnimationFrame(() => scrollToBottom(isLoading ? 'auto' : 'smooth'));
     } else {
       setShowScrollDown(true);
     }
@@ -231,6 +247,8 @@ const ChatApp: React.FC = () => {
     const question = input;
     setInput('');
     setIsLoading(true);
+    streamBufferRef.current = '';
+    followAnswerScrollRef.current = true;
 
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -248,6 +266,9 @@ const ChatApp: React.FC = () => {
         timestamp: Date.now(),
       };
       updateActiveConversation(prev => [...prev, assistantMessage]);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollToBottom('smooth'));
+      });
 
       let finalSources: any[] | undefined;
       let finalConfidence: number | undefined;
@@ -269,21 +290,30 @@ const ChatApp: React.FC = () => {
           }
           updateActiveConversation(prev => {
             const next = [...prev];
-            const last = next[next.length - 1];
+            const lastIdx = next.length - 1;
+            const last = next[lastIdx];
             if (last?.role === 'assistant') {
-              last.sources = finalSources as any;
-              last.confidence = finalConfidence;
-              last.metrics = finalMetrics;
-              last.evaluationEnabled = finalEvaluationEnabled;
+              next[lastIdx] = {
+                ...last,
+                sources: finalSources as any,
+                confidence: finalConfidence,
+                metrics: finalMetrics,
+                evaluationEnabled: finalEvaluationEnabled,
+              };
             }
             return next;
           });
         } else if (evt.type === 'delta' && evt.text) {
+          streamBufferRef.current = evt.text.startsWith(streamBufferRef.current)
+            ? evt.text
+            : streamBufferRef.current + evt.text;
+          const snapshot = streamBufferRef.current;
           updateActiveConversation(prev => {
             const next = [...prev];
-            const last = next[next.length - 1];
+            const lastIdx = next.length - 1;
+            const last = next[lastIdx];
             if (last?.role === 'assistant') {
-              last.content = (last.content || '') + evt.text;
+              next[lastIdx] = { ...last, content: snapshot };
             }
             return next;
           });
@@ -291,18 +321,20 @@ const ChatApp: React.FC = () => {
           finalTotalTime = evt.total_time;
           updateActiveConversation(prev => {
             const next = [...prev];
-            const last = next[next.length - 1];
+            const lastIdx = next.length - 1;
+            const last = next[lastIdx];
             if (last?.role === 'assistant') {
-              last.total_time = finalTotalTime;
+              next[lastIdx] = { ...last, total_time: finalTotalTime };
             }
             return next;
           });
         } else if (evt.type === 'error') {
           updateActiveConversation(prev => {
             const next = [...prev];
-            const last = next[next.length - 1];
+            const lastIdx = next.length - 1;
+            const last = next[lastIdx];
             if (last?.role === 'assistant') {
-              last.content = evt.message || 'Streaming error';
+              next[lastIdx] = { ...last, content: evt.message || 'Streaming error' };
             }
             return next;
           });
@@ -331,6 +363,7 @@ const ChatApp: React.FC = () => {
         abortControllerRef.current = null;
       }
       setIsLoading(false);
+      setMetricsRefreshKey((k) => k + 1);
     }
   };
 
@@ -538,6 +571,8 @@ const ChatApp: React.FC = () => {
                 </div>
               </div>
 
+              <ModelMetricsDrawer refreshKey={metricsRefreshKey} />
+
               <div className="sidebar-footer">
                 <button className="sidebar-footer-btn" onClick={handleLogout}>
                   <LogOut size={16} />
@@ -624,11 +659,16 @@ const ChatApp: React.FC = () => {
                       </span>
                       <div className="message-bubble">
                         {msg.role === 'assistant' ? (
-                          <div className="markdown-content">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content}
-                            </ReactMarkdown>
-                          </div>
+                          !msg.content?.trim() && isLoading && idx === messages.length - 1 ? (
+                            <div className="thinking-bubble">
+                              <div className="thinking-dots">
+                                <span /><span /><span />
+                              </div>
+                              Analyzing documents...
+                            </div>
+                          ) : (
+                            <MarkdownAnswer content={msg.content} />
+                          )
                         ) : (
                           msg.content
                         )}
@@ -665,7 +705,7 @@ const ChatApp: React.FC = () => {
                       </div>
                     )}
                     
-                    {msg.role === 'assistant' && msg.confidence !== undefined && (
+                    {msg.role === 'assistant' && msg.confidence !== undefined && msg.content?.trim() && (
                       <div className="trust-indicator-container">
                         {(() => {
                           const evalOn = isMessageEvalOn(msg);
@@ -729,22 +769,6 @@ const ChatApp: React.FC = () => {
                     </div>
                   </div>
                 ))
-              )}
-              {isLoading && !messages[messages.length - 1]?.content && (
-                <div className="message assistant">
-                  <div className="message-avatar">
-                    <Bot size={16} />
-                  </div>
-                  <div className="message-body">
-                    <span className="message-label">MedAssist</span>
-                    <div className="message-bubble thinking-bubble">
-                      <div className="thinking-dots">
-                        <span /><span /><span />
-                      </div>
-                      Analyzing documents...
-                    </div>
-                  </div>
-                </div>
               )}
               <div ref={chatEndRef} />
               </div>

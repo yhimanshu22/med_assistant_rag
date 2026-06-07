@@ -1,8 +1,17 @@
+import os
+
+# Reduce native crashes on Windows CPU when loading transformers models.
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import torch
 import transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from langchain_huggingface import HuggingFacePipeline
 from med_assistant.core.config import settings
+
+torch.set_num_threads(1)
 
 
 def get_llm():
@@ -52,13 +61,16 @@ def load_local_pipeline():
             raise e
     else:
         model_id = settings.CPU_MODEL_ID
+        # float32 is slower but far more stable than bfloat16 on Windows CPU.
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             trust_remote_code=True,
-            device_map="cpu",
-            torch_dtype=torch.bfloat16,
-            cache_dir=settings.MODEL_CACHE_DIR
+            low_cpu_mem_usage=True,
+            dtype=torch.float32,
+            cache_dir=settings.MODEL_CACHE_DIR,
         )
+        model.to("cpu")
+        model.eval()
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, cache_dir=settings.MODEL_CACHE_DIR)
     
@@ -68,7 +80,7 @@ def load_local_pipeline():
         tokenizer=tokenizer,
         max_new_tokens=256,
         do_sample=False,
-        repetition_penalty=1.1,
+        repetition_penalty=1.25,
         return_full_text=False
     )
 

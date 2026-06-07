@@ -48,6 +48,44 @@ export interface QueryResponse {
   };
 }
 
+export interface LatencySummary {
+  count: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+}
+
+export interface EvalScoreSummary {
+  count: number;
+  avg: number;
+}
+
+export interface MetricsErrorEntry {
+  at: number;
+  event: string;
+  error: string;
+  path?: string | null;
+  request_id?: string | null;
+}
+
+export interface MetricsSnapshot {
+  queries_total: number;
+  errors_total: number;
+  cache_hits: number;
+  conversational_queries: number;
+  retrieval_hit_rate: number;
+  retrieval_hits: number;
+  retrieval_misses: number;
+  latency_ms: LatencySummary;
+  stages_ms: Record<'rewrite' | 'retrieve' | 'llm' | 'eval', LatencySummary>;
+  evaluation_scores: {
+    faithfulness: EvalScoreSummary;
+    relevance: EvalScoreSummary;
+    confidence: EvalScoreSummary;
+  };
+  recent_errors: MetricsErrorEntry[];
+}
+
 export interface IngestionLog {
   step: 'scanning' | 'processing' | 'splitting' | 'embedding' | 'ingesting' | 'complete';
   message: string;

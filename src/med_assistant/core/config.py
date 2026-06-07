@@ -30,12 +30,27 @@ class Settings(BaseSettings):
 
     # Server master switch: if False, users cannot enable Ragas evaluation in the UI.
     # Ragas adds multiple extra LLM calls per answer (very slow on CPU).
-    ENABLE_RAG_EVALUATION: bool = True
+    ENABLE_RAG_EVALUATION: bool = False
 
     # Auth
     DATABASE_URL: str = _DEFAULT_DATABASE_URL
     SECRET_KEY: str = "change-me-in-production-use-a-long-random-secret"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+
+    # Comma-separated list, e.g. http://localhost:5173,https://app.example.com
+    CORS_ORIGINS: str = "http://localhost:5173"
+
+    # Observability
+    LOG_LEVEL: str = "INFO"
+    SENTRY_DSN: str | None = None
+    APP_ENV: str = "development"
+    # If True, defer LLM load until the first query (lets API start when model load is slow).
+    LAZY_LLM_LOAD: bool = False
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
 
 settings = Settings()

@@ -11,6 +11,7 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 
 from med_assistant.core.config import settings
+from med_assistant.core.observability import metrics_registry
 from med_assistant.services.llm_service import get_llm
 from med_assistant.services.evaluation_service import EvaluatorService
 from langchain.prompts import PromptTemplate
@@ -58,6 +59,34 @@ def is_conversational_query(question: str) -> bool:
     return len(q_norm.split()) <= 4
 
 
+def _clean_generated_answer(text: str) -> str:
+    """Normalize LLM output and remove stutter-style repetition from small models."""
+    if not text:
+        return text
+
+    cleaned = text.strip()
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    # Tiny models often restart the same passage mid-answer (sometimes multiple times).
+    for _ in range(3):
+        anchor_len = min(32, max(16, len(cleaned) // 6))
+        if len(cleaned) <= anchor_len * 2:
+            break
+        anchor = cleaned[:anchor_len]
+        repeat_at = cleaned.find(anchor, anchor_len)
+        if repeat_at == -1:
+            break
+        first = cleaned[:repeat_at].strip()
+        second = cleaned[repeat_at:].strip()
+        cleaned = second if len(second) > len(first) else first
+
+    if "\n\n" not in cleaned and len(cleaned) > 280:
+        cleaned = re.sub(r"(?<=[.!?])\s+(?=[A-Z])", "\n\n", cleaned)
+
+    return cleaned.strip()
+
+
 def conversational_reply(question: str) -> str:
     q_norm = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", question.strip().lower())).strip()
     if q_norm in {"thanks", "thank you", "thx", "ty", "thankyou"} or _THANKS_RE.match(q_norm):
@@ -93,8 +122,12 @@ class RAGService:
         Initializes the Model and RAG chain. 
         Uses a local open-source HuggingFace model.
         """
-        # 1. Get LLM (local HuggingFace)
-        self.llm = get_llm()
+        # 1. Get LLM (local HuggingFace) — optional defer for faster API startup
+        if settings.LAZY_LLM_LOAD:
+            self.llm = None
+            print("LLM load deferred until first query (LAZY_LLM_LOAD=true).")
+        else:
+            self.llm = get_llm()
 
 
         # 2. Load Embeddings
@@ -129,7 +162,7 @@ INSTRUCTIONS:
 3. Maintain a professional, clinical, and helpful tone.
 4. If there are conflicting details in the context, mention them.
 5. Do NOT hallucinate or use outside knowledge that isn't supported by the context.
-6. Use Markdown (headers, bullet points, and bold text) to structure your answer for professional clarity and readability.
+6. Use Markdown to structure your answer: headers, bullet points, **bold** for key terms, *italics* for clinical emphasis, and ==double equals== around the most important findings (e.g. ==aplastic anemia==).
 
 Context:
 {context}
@@ -190,6 +223,12 @@ Detailed Evidence-Based Answer:"""
             self._bm25_docs = []
             self._bm25 = None
 
+    def _ensure_llm(self):
+        if self.llm is None:
+            print("Loading Local HuggingFace LLM (first query)...")
+            self.llm = get_llm()
+        return self.llm
+
     def _should_evaluate(self, enable_evaluation: bool) -> bool:
         return bool(settings.ENABLE_RAG_EVALUATION and enable_evaluation)
 
@@ -224,11 +263,12 @@ Detailed Evidence-Based Answer:"""
         sources: List[Dict[str, Any]],
         eval_results: Dict[str, float],
         enable_evaluation: bool,
+        obs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         enabled = self._should_evaluate(enable_evaluation)
         if not enabled:
             eval_results = self._default_eval_scores()
-        return {
+        result = {
             "answer": answer,
             "sources": sources,
             "confidence": eval_results["confidence_score"],
@@ -238,6 +278,28 @@ Detailed Evidence-Based Answer:"""
             },
             "evaluation_enabled": enabled,
         }
+        if obs is not None:
+            obs["faithfulness"] = eval_results["faithfulness"]
+            obs["relevance"] = eval_results["relevance"]
+            obs["evaluation_enabled"] = enabled
+            result["_obs"] = obs
+            metrics_registry.record_rag_query(obs)
+        return result
+
+    def _new_obs(self) -> Dict[str, Any]:
+        return {
+            "stages_ms": {"rewrite": 0.0, "retrieve": 0.0, "llm": 0.0, "eval": 0.0},
+            "conversational": False,
+            "cache_hit": False,
+            "weak_retrieval": False,
+            "retrieval_hit": False,
+            "best_dense_distance": None,
+            "source_count": 0,
+        }
+
+    def _finalize_obs(self, obs: Dict[str, Any], started_at: float) -> Dict[str, Any]:
+        obs["total_ms"] = round((time() - started_at) * 1000, 2)
+        return obs
 
     def _normalize_cached_result(
         self,
@@ -270,7 +332,7 @@ Detailed Evidence-Based Answer:"""
                 f"Chat History:\n{history_text}\n\n"
                 f"Follow Up Input: {question}\n\nStandalone question:"
             )
-            rewritten = self.llm.invoke(prompt)
+            rewritten = self._ensure_llm().invoke(prompt)
             rewritten = rewritten.content if hasattr(rewritten, "content") else str(rewritten)
             rewritten = rewritten.strip()
             return rewritten if rewritten else question
@@ -354,25 +416,70 @@ Detailed Evidence-Based Answer:"""
         chat_history: list = None,
         enable_evaluation: bool = False,
     ):
-        if not self.vectordb or not self.llm:
+        if not self.vectordb:
+            raise RuntimeError("RAG Service is not initialized.")
+        if not settings.LAZY_LLM_LOAD and not self.llm:
             raise RuntimeError("RAG Service is not initialized.")
 
+        started_at = time()
+        obs = self._new_obs()
+
         if is_conversational_query(question):
+            obs["conversational"] = True
             cache_key = f"conv::{question.strip().lower()}::eval={int(enable_evaluation)}"
             cached = self._answer_cache.get(cache_key)
             if cached:
-                return self._normalize_cached_result(cached, enable_evaluation)
+                obs["cache_hit"] = True
+                result = self._normalize_cached_result(cached, enable_evaluation)
+                return self._build_result(
+                    result["answer"],
+                    result.get("sources", []),
+                    {
+                        "faithfulness": result.get("metrics", {}).get("faithfulness", 0.0),
+                        "relevance": result.get("metrics", {}).get("relevance", 0.0),
+                        "confidence_score": result.get("confidence", 0.0),
+                    },
+                    enable_evaluation,
+                    self._finalize_obs(obs, started_at),
+                )
             result = self._conversational_answer(question, enable_evaluation)
-            self._answer_cache[cache_key] = result
-            return result
+            self._answer_cache[cache_key] = {k: v for k, v in result.items() if k != "_obs"}
+            return self._build_result(
+                result["answer"],
+                result.get("sources", []),
+                {
+                    "faithfulness": result["metrics"]["faithfulness"],
+                    "relevance": result["metrics"]["relevance"],
+                    "confidence_score": result["confidence"],
+                },
+                enable_evaluation,
+                self._finalize_obs(obs, started_at),
+            )
 
+        rewrite_started = time()
         standalone_q = self._rewrite_question(question, chat_history)
+        obs["stages_ms"]["rewrite"] = round((time() - rewrite_started) * 1000, 2)
+
         cache_key = f"q::{standalone_q}::eval={int(enable_evaluation)}"
         cached = self._answer_cache.get(cache_key)
         if cached:
-            return self._normalize_cached_result(cached, enable_evaluation)
+            obs["cache_hit"] = True
+            result = self._normalize_cached_result(cached, enable_evaluation)
+            obs["retrieval_hit"] = bool(result.get("sources"))
+            obs["source_count"] = len(result.get("sources", []))
+            return self._build_result(
+                result["answer"],
+                result.get("sources", []),
+                {
+                    "faithfulness": result.get("metrics", {}).get("faithfulness", 0.0),
+                    "relevance": result.get("metrics", {}).get("relevance", 0.0),
+                    "confidence_score": result.get("confidence", 0.0),
+                },
+                enable_evaluation,
+                self._finalize_obs(obs, started_at),
+            )
 
-        # Retrieval cache (docs only; avoids repeated DB lookups on same query)
+        retrieve_started = time()
         r_cached = self._retrieval_cache.get(cache_key)
         if r_cached:
             dense_hits = r_cached["dense_hits"]
@@ -391,12 +498,16 @@ Detailed Evidence-Based Answer:"""
             self._retrieval_cache[cache_key] = {"dense_hits": dense_hits, "bm25_hits": bm25_hits, "source_docs": source_docs}
             if len(self._retrieval_cache) > self._cache_max_entries:
                 self._retrieval_cache.pop(next(iter(self._retrieval_cache)))
+        obs["stages_ms"]["retrieve"] = round((time() - retrieve_started) * 1000, 2)
+        obs["source_count"] = len(source_docs)
 
-        # Thresholding: if dense retrieval is very weak, refuse/ask for more info
         best_dense_dist = None
         if dense_hits:
             best_dense_dist = float(sorted(dense_hits, key=lambda x: x[1])[0][1])
+        obs["best_dense_distance"] = best_dense_dist
+
         if best_dense_dist is not None and best_dense_dist > settings.RETRIEVAL_MAX_DISTANCE:
+            obs["weak_retrieval"] = True
             answer = (
                 "I couldn’t find strong enough evidence in the uploaded documents to answer this reliably.\n\n"
                 "Try:\n"
@@ -405,13 +516,19 @@ Detailed Evidence-Based Answer:"""
                 "- Providing the page/section you want me to use\n"
             )
             sources = [{"page_content": d.page_content, "metadata": d.metadata} for d in source_docs]
+            eval_started = time()
             eval_results = self._evaluate_if_enabled(
                 question,
                 "\n".join([d.page_content for d in source_docs])[:6000],
                 answer,
                 enable_evaluation,
             )
-            return self._build_result(answer, sources, eval_results, enable_evaluation)
+            obs["stages_ms"]["eval"] = round((time() - eval_started) * 1000, 2)
+            return self._build_result(
+                answer, sources, eval_results, enable_evaluation, self._finalize_obs(obs, started_at)
+            )
+
+        obs["retrieval_hit"] = len(source_docs) > 0
 
         context = "\n\n".join(
             [
@@ -422,32 +539,36 @@ Detailed Evidence-Based Answer:"""
 
         prompt_text = self._qa_prompt.format(context=context, question=standalone_q)
         try:
-            answer = self.llm.invoke(prompt_text)
+            llm_started = time()
+            answer = self._ensure_llm().invoke(prompt_text)
             answer = answer.content if hasattr(answer, "content") else str(answer)
-            answer = str(answer).strip()
+            answer = _clean_generated_answer(str(answer))
+            obs["stages_ms"]["llm"] = round((time() - llm_started) * 1000, 2)
         except Exception as e:
+            metrics_registry.record_error(event="rag.llm.failed", error=str(e))
             return self._build_result(
                 f"I encountered an error while processing your request: {str(e)}",
                 [],
                 self._default_eval_scores(),
                 enable_evaluation,
+                self._finalize_obs(obs, started_at),
             )
 
-        # Format sources
         sources = [{"page_content": doc.page_content, "metadata": doc.metadata} for doc in source_docs]
-        
-        # Perform real-time evaluation for Clinical Reliability
-        # Truncate context to a safe length for LLM evaluation (approx 1500 tokens / 6000 chars)
         context_str = "\n".join([doc.page_content for doc in source_docs])
         if len(context_str) > 6000:
             context_str = context_str[:6000] + "... [context truncated]"
-            
-        eval_results = self._evaluate_if_enabled(
-            question, context_str, answer, enable_evaluation
-        )
-        result = self._build_result(answer, sources, eval_results, enable_evaluation)
 
-        self._answer_cache[cache_key] = result
+        eval_started = time()
+        eval_results = self._evaluate_if_enabled(question, context_str, answer, enable_evaluation)
+        obs["stages_ms"]["eval"] = round((time() - eval_started) * 1000, 2)
+
+        result = self._build_result(
+            answer, sources, eval_results, enable_evaluation, self._finalize_obs(obs, started_at)
+        )
+
+        cache_payload = {k: v for k, v in result.items() if k != "_obs"}
+        self._answer_cache[cache_key] = cache_payload
         if len(self._answer_cache) > self._cache_max_entries:
             self._answer_cache.pop(next(iter(self._answer_cache)))
 
@@ -480,7 +601,7 @@ Detailed Evidence-Based Answer:"""
             "evaluation_enabled": evaluation_enabled,
         }
 
-        for i in range(0, len(answer), chunk_size):
-            yield {"type": "delta", "text": answer[i : i + chunk_size]}
+        if answer:
+            yield {"type": "delta", "text": answer}
 
         yield {"type": "done", "total_time": f"{round(time() - start, 3)} sec"}

@@ -22,6 +22,16 @@ def test_query_endpoint_success(client, mock_rag_service):
         "What is Influenza?", [], enable_evaluation=False
     )
 
+def test_metrics_endpoint(client):
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    data = response.json()
+    assert "queries_total" in data
+    assert "retrieval_hit_rate" in data
+    assert "latency_ms" in data
+    assert "recent_errors" in data
+
+
 def test_query_endpoint_missing_question(client):
     """Test standard validation error for missing field."""
     payload = {}  # Missing question
